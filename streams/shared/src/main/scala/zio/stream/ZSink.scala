@@ -286,7 +286,7 @@ abstract class ZSink[-R, +E, -I, +L, +Z] private (
   /**
    * Returns the sink that executes this one and times its execution.
    */
-  final def timed: ZSink[R with Clock, E, I, L, (Z, Duration)] =
+  final def timed: ZSink[R with Has[Clock], E, I, L, (Z, Duration)] =
     ZSink {
       self.push.zipWith(clock.nanoTime.toManaged_) { (push, start) =>
         push(_).catchAll {
@@ -920,7 +920,7 @@ object ZSink extends ZSinkPlatformSpecificConstructors {
   /**
    * A sink with timed execution.
    */
-  def timed: ZSink[Clock, Nothing, Any, Nothing, Duration] = ZSink.drain.timed.map(_._2)
+  def timed: ZSink[Has[Clock], Nothing, Any, Nothing, Duration] = ZSink.drain.timed.map(_._2)
 
   final class AccessSinkPartiallyApplied[R](private val dummy: Boolean = true) extends AnyVal {
     def apply[E, I, L, Z](f: R => ZSink[R, E, I, L, Z]): ZSink[R, E, I, L, Z] =

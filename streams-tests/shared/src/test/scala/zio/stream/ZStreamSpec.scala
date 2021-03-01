@@ -3954,8 +3954,8 @@ object ZStreamSpec extends ZIOBaseSpec {
   def assertWithChunkCoordination[A](
     chunks: List[Chunk[A]]
   )(
-    assertion: ChunkCoordination[A] => ZIO[Clock with TestClock, Nothing, TestResult]
-  ): ZIO[Clock with TestClock, Nothing, TestResult] =
+    assertion: ChunkCoordination[A] => ZIO[Has[Clock] with TestClock, Nothing, TestResult]
+  ): ZIO[Has[Clock] with TestClock, Nothing, TestResult] =
     for {
       q  <- Queue.unbounded[Exit[Option[Nothing], Chunk[A]]]
       ps <- Queue.unbounded[Unit]
