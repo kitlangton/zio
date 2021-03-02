@@ -1,9 +1,9 @@
 package zio.stm
 
-import zio.ZIOBaseSpec
 import zio.random.Random
 import zio.test.Assertion._
 import zio.test._
+import zio.{Has, ZIOBaseSpec}
 
 object TSemaphoreSpec extends ZIOBaseSpec {
   override def spec: ZSpec[Environment, Failure] = suite("TSemaphore")(
@@ -84,7 +84,7 @@ object TSemaphoreSpec extends ZIOBaseSpec {
     case x          => stm *> repeat(stm)(x - 1)
   }
 
-  private val usedCapacityGen: Gen[Random, (Long, Long, Long)] = for {
+  private val usedCapacityGen: Gen[Has[Random], (Long, Long, Long)] = for {
     capacity <- Gen.long(1L, 1000)
     acquire  <- Gen.long(1L, capacity)
     release  <- Gen.long(1L, acquire)
