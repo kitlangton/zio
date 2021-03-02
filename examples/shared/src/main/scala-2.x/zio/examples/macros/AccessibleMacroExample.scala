@@ -33,28 +33,31 @@ object AccessibleMacroExample {
     def sink(n: Int): ZSink[Any, Nothing, Int, Nothing, Chunk[Int]]
   }
 
-  val live: ZLayer[Console, Nothing, Has[Service]] =
+  val live: ZLayer[Has[Console], Nothing, Has[Service]] =
     ZLayer.fromService(console =>
       new Service {
-        val foo: UIO[Unit]                                      = UIO.unit
+        val foo: UIO[Unit]                                              = UIO.unit
         def foo2: UIO[Unit]                                     = UIO.unit
         def foo3(): UIO[Unit]                                   = UIO.unit
-        def bar(n: Int): UIO[Unit]                              = console.putStrLn(s"bar $n")
-        def baz(x: Int, y: Int): IO[String, Int]                = UIO.succeed(x + y)
-        def poly[A](a: A): IO[Long, A]                          = UIO.succeed(a)
-        def poly2[A <: Foo](a: Wrapped[A]): IO[String, List[A]] = UIO.succeed(List(a.value))
-        def dependent(n: Int): ZIO[Random, Long, Int]           = random.nextIntBounded(n)
-        val value: String                                       = "foo"
+        def bar(n: Int): UIO[Unit]                                      = console.putStrLn(s"bar $n")
+        def baz(x: Int, y: Int): IO[String, Int]                        = UIO.succeed(x + y)
+        def poly[A](a: A): IO[Long, A]                                  = UIO.succeed(a)
+        def poly2[A <: Foo](a: Wrapped[A]): IO[String, List[A]]         = UIO.succeed(List(a.value))
+        def dependent(n: Int): ZIO[Random, Long, Int]                   = random.nextIntBounded(n)
+        val value: String                                               = "foo"
         def value2: String                                      = "foo2"
         def value3(): String                                    = "foo3"
-        def function(n: Int): String                            = s"foo $n"
-        def stream(n: Int): ZStream[Any, String, Int]           = ZStream.fromIterable(List(1, 2, 3))
-        def sink(n: Int): ZSink[Any, Nothing, Int, Nothing, Chunk[Int]]  = ZSink.collectAll
+        def function(n: Int): String                                    = s"foo $n"
+        def stream(n: Int): ZStream[Any, String, Int]                   = ZStream.fromIterable(List(1, 2, 3))
+        def sink(n: Int): ZSink[Any, Nothing, Int, Nothing, Chunk[Int]] = ZSink.collectAll
       }
     )
 
   // can use accessors even in the same compilation unit
-  val program: URIO[AccessibleMacroExample with Random, (Int, String, Long, List[Foo], Int, String, String, String, String, Chunk[Int], Chunk[Int])] =
+  val program: URIO[
+    AccessibleMacroExample with Random,
+    (Int, String, Long, List[Foo], Int, String, String, String, String, Chunk[Int], Chunk[Int])
+  ] =
     for {
       _   <- AccessibleMacroExample.foo
       _   <- AccessibleMacroExample.foo2
@@ -74,20 +77,19 @@ object AccessibleMacroExample {
     } yield (v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11)
 
   // sanity check
-  val _foo                            : URIO[AccessibleMacroExample, Unit]                               = AccessibleMacroExample.foo
+  val _foo: URIO[AccessibleMacroExample, Unit]                                        = AccessibleMacroExample.foo
   def _foo2                           : URIO[AccessibleMacroExample, Unit]                               = AccessibleMacroExample.foo2
   def _foo3()                         : URIO[AccessibleMacroExample, Unit]                               = AccessibleMacroExample.foo3()
-  def _bar(n: Int)                    : URIO[AccessibleMacroExample, Unit]                               = AccessibleMacroExample.bar(n)
-  def _baz(x: Int, y: Int)            : ZIO[AccessibleMacroExample, String, Int]                         = AccessibleMacroExample.baz(x, y)
-  def _poly[A](a: A)                  : ZIO[AccessibleMacroExample, Long, A]                             = AccessibleMacroExample.poly(a)
-  def _poly2[A <: Foo](a: Wrapped[A]) : ZIO[AccessibleMacroExample, String, List[A]]                     = AccessibleMacroExample.poly2(a)
-  def _dependent(n: Int)              : ZIO[AccessibleMacroExample with Random, Long, Int]               = AccessibleMacroExample.dependent(n)
-  val _value                          : RIO[AccessibleMacroExample, String]                              = AccessibleMacroExample.value
-  def _value2                         : RIO[AccessibleMacroExample, String]                              = AccessibleMacroExample.value2
+  def _bar(n: Int): URIO[AccessibleMacroExample, Unit]                                = AccessibleMacroExample.bar(n)
+  def _baz(x: Int, y: Int): ZIO[AccessibleMacroExample, String, Int]                  = AccessibleMacroExample.baz(x, y)
+  def _poly[A](a: A): ZIO[AccessibleMacroExample, Long, A]                            = AccessibleMacroExample.poly(a)
+  def _poly2[A <: Foo](a: Wrapped[A]): ZIO[AccessibleMacroExample, String, List[A]]   = AccessibleMacroExample.poly2(a)
+  def _dependent(n: Int): ZIO[AccessibleMacroExample with Random, Long, Int]          = AccessibleMacroExample.dependent(n)
+  val _value: RIO[AccessibleMacroExample, String]                                     = AccessibleMacroExample.valuedef _value2                         : RIO[AccessibleMacroExample, String]                              = AccessibleMacroExample.value2
   def _value3()                       : RIO[AccessibleMacroExample, String]                              = AccessibleMacroExample.value3()
-  def _function(n: Int)               : RIO[AccessibleMacroExample, String]                              = AccessibleMacroExample.function(n)
-  def _stream(n: Int)                 : ZStream[AccessibleMacroExample, String, Int]                     = AccessibleMacroExample.stream(n)
-  def _sink(n: Int)                   : ZSink[AccessibleMacroExample, Nothing, Int, Nothing, Chunk[Int]] = AccessibleMacroExample.sink(n)
+  def _function(n: Int): RIO[AccessibleMacroExample, String]                          = AccessibleMacroExample.function(n)
+  def _stream(n: Int): ZStream[AccessibleMacroExample, String, Int]                   = AccessibleMacroExample.stream(n)
+  def _sink(n: Int): ZSink[AccessibleMacroExample, Nothing, Int, Nothing, Chunk[Int]] = AccessibleMacroExample.sink(n)
 
   // macro autogenerates accessors for
   // `foo`, `foo2`, `foo3`, `bar`, `baz`, `poly`, `poly2`,
