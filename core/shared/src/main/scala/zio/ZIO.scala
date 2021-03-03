@@ -1981,14 +1981,14 @@ sealed trait ZIO[-R, +E, +A] extends Serializable with ZIOPlatformSpecific[R, E,
    * Constructs a layer from this effect.
    */
   final def toLayer[A1 >: A](implicit ev: Tag[A1]): ZLayer[R, E, Has[A1]] =
-    ZLayer.fromEffect(self)
+    ZLayer.apply(self)
 
   /**
    * Constructs a layer from this effect, which must return one or more
    * services.
    */
-  final def toLayerMany[A1 <: Has[_]](implicit ev: A <:< A1): ZLayer[R, E, A1] =
-    ZLayer(ZManaged.fromEffect(self.map(ev)))
+  final def toLayerMany[A1](implicit ev: A <:< A1): ZLayer[R, E, A1] =
+    ZLayer.many(ZManaged.fromEffect(self.map(ev)))
 
   /**
    * Converts this ZIO to [[zio.Managed]]. This ZIO and the provided release action
@@ -3862,6 +3862,18 @@ object ZIO extends ZIOCompanionPlatformSpecific {
     ZIO.access(_.get[A])
 
   /**
+   * Effectfully accesses the specified service in the environment of the effect.
+   * Often used with the Service pattern to define effectful accessors on the
+   * companion object.
+   *
+   * {{{
+   *   val foo : ZIO[Has[Foo], Nothing, Bar] = ZIO.serviceWith(_.bar)
+   * }}}
+   */
+  def serviceWith[A]: ServiceWithPartiallyApplied[A] =
+    new ServiceWithPartiallyApplied[A]
+
+  /**
    * Accesses the specified services in the environment of the effect.
    */
   def services[A: Tag, B: Tag]: URIO[Has[A] with Has[B], (A, B)] =
@@ -4243,6 +4255,11 @@ object ZIO extends ZIOCompanionPlatformSpecific {
   final class AccessMPartiallyApplied[R](private val dummy: Boolean = true) extends AnyVal {
     def apply[E, A](f: R => ZIO[R, E, A]): ZIO[R, E, A] =
       new ZIO.Read(f)
+  }
+
+  final class ServiceWithPartiallyApplied[R](private val dummy: Boolean = true) extends AnyVal {
+    def apply[E, A](f: R => ZIO[Has[R], E, A])(implicit tag: Tag[R]): ZIO[Has[R], E, A] =
+      new ZIO.Read((r: Has[R]) => f(r.get[R]))
   }
 
   @inline
