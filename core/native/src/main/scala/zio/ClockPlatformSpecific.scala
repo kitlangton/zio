@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package zio.clock
+package zio
 
 import zio.duration.Duration
 import zio.internal.Scheduler
@@ -22,8 +22,8 @@ import zio.internal.Scheduler
 import scala.concurrent.duration._
 import scala.scalanative.loop._
 
-private[clock] trait PlatformSpecific {
-  private[clock] val globalScheduler = new Scheduler {
+private[zio] trait ClockPlatformSpecific {
+  private[zio] val globalScheduler = new Scheduler {
     import Scheduler.CancelToken
 
     private[this] val ConstFalse = () => false
