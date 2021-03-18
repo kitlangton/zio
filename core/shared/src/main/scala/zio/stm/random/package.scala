@@ -1,7 +1,6 @@
 package zio.stm
 
-import zio._
-import zio.Random
+import zio.{Random, _}
 
 package object random {
   trait TRandom {

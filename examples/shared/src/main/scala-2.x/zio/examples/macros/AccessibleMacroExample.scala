@@ -2,9 +2,9 @@ package zio.examples.macros
 
 import zio.Console
 import zio.macros.accessible
-import zio.Random
 import zio.stream.{ZSink, ZStream}
-import zio.{Chunk, Has, IO, RIO, UIO, URIO, ZIO, ZLayer, Random}
+import zio.{Chunk, Has, IO, RIO, UIO, URIO, ZIO, ZLayer, Random, Blocking}
+import zio.Blocking.effectBlocking
 
 object UpdatedAccessibleMacroExample {
   trait Foo { val value: String }
