@@ -99,7 +99,7 @@ object BuildHelper {
   // Keep this consistent with the version in .core-tests/shared/src/test/scala/REPLSpec.scala
   val replSettings = makeReplSettings {
     """|import zio._
-       |import zio.console._
+       |import zio.Console._
        |import zio.duration._
        |import zio.Runtime.default._
        |implicit class RunSyntax[A](io: ZIO[ZEnv, Any, A]){ def unsafeRun: A = Runtime.default.unsafeRun(io.provideLayer(ZEnv.live)) }
@@ -109,7 +109,7 @@ object BuildHelper {
   // Keep this consistent with the version in .streams-tests/shared/src/test/scala/StreamREPLSpec.scala
   val streamReplSettings = makeReplSettings {
     """|import zio._
-       |import zio.console._
+       |import zio.Console._
        |import zio.duration._
        |import zio.stream._
        |import zio.Runtime.default._
