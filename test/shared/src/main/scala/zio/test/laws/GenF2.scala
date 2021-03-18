@@ -1,7 +1,7 @@
 package zio.test.laws
 
 import zio.Has
-import zio.random.Random
+import zio.Random
 import zio.test.{FunctionVariants, Gen}
 
 /**
