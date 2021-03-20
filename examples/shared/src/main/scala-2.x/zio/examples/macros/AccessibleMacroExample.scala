@@ -1,10 +1,8 @@
 package zio.examples.macros
 
-import zio.Console
 import zio.macros.accessible
 import zio.stream.{ZSink, ZStream}
-import zio.{Chunk, Has, IO, RIO, UIO, URIO, ZIO, ZLayer, Random, Blocking}
-import zio.Blocking.effectBlocking
+import zio.{Chunk, Console, Has, IO, RIO, Random, UIO, URIO, ZIO, ZLayer}
 
 object UpdatedAccessibleMacroExample {
   trait Foo { val value: String }
@@ -107,7 +105,7 @@ object AccessibleMacroExample {
           val foo: UIO[Unit]                                              = UIO.unit
           def foo2: UIO[Unit]                                     = UIO.unit
           def foo3(): UIO[Unit]                                   = UIO.unit
-          def bar(n: Int): UIO[Unit]                                      = console.putStrLn(s"bar $n")
+          def bar(n: Int): UIO[Unit]                                      = console.printLine(s"bar $n")
           def baz(x: Int, y: Int): IO[String, Int]                        = UIO.succeed(x + y)
           def poly[A](a: A): IO[Long, A]                                  = UIO.succeed(a)
           def poly2[A <: Foo](a: Wrapped[A]): IO[String, List[A]]         = UIO.succeed(List(a.value))
