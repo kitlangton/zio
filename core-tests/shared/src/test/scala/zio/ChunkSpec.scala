@@ -164,7 +164,7 @@ object ChunkSpec extends ZIOBaseSpec {
     },
     testM("specialized accessors") {
       check(chunkWithIndex(Gen.boolean)) { case (chunk, i) =>
-        assert(chunk.boolean(i))(equalTo(chunk.toList.apply(i)))
+        assert(chunk.boolean(i) == chunk.toList.apply(i))
       }
       check(chunkWithIndex(Gen.byte(0, 127))) { case (chunk, i) =>
         assert(chunk.byte(i))(equalTo(chunk.toList.apply(i)))
@@ -194,7 +194,7 @@ object ChunkSpec extends ZIOBaseSpec {
       check(genChunk, genChunk, genFunction) { (as, bs, f) =>
         val actual   = as.corresponds(bs)(f)
         val expected = as.toList.corresponds(bs.toList)(f)
-        assert(actual)(equalTo(expected))
+        assert(actual == expected)
       }
     },
     testM("fill") {
@@ -213,7 +213,7 @@ object ChunkSpec extends ZIOBaseSpec {
     },
     testM("equality") {
       check(mediumChunks(intGen), mediumChunks(intGen)) { (c1, c2) =>
-        assert(c1.equals(c2))(equalTo(c1.toList.equals(c2.toList)))
+        assert(c1.equals(c2) == c1.toList.equals(c2.toList))
       }
     },
     test("inequality") {
@@ -286,11 +286,11 @@ object ChunkSpec extends ZIOBaseSpec {
     } @@ exceptScala211,
     testM("exists") {
       val fn = Gen.function[Random with Sized, Int, Boolean](Gen.boolean)
-      check(mediumChunks(intGen), fn)((chunk, p) => assert(chunk.exists(p))(equalTo(chunk.toList.exists(p))))
+      check(mediumChunks(intGen), fn)((chunk, p) => assert(chunk.exists(p) == chunk.toList.exists(p)))
     },
     testM("forall") {
       val fn = Gen.function[Random with Sized, Int, Boolean](Gen.boolean)
-      check(mediumChunks(intGen), fn)((chunk, p) => assert(chunk.forall(p))(equalTo(chunk.toList.forall(p))))
+      check(mediumChunks(intGen), fn)((chunk, p) => assert(chunk.forall(p) == chunk.toList.forall(p)))
     },
     testM("find") {
       val fn = Gen.function[Random with Sized, Int, Boolean](Gen.boolean)
@@ -440,31 +440,31 @@ object ChunkSpec extends ZIOBaseSpec {
       val c1 = Chunk(1, 2, 3)
       val c2 = Chunk(1, 2, 3)
       val c3 = Chunk(1, 2, 3)
-      assert(c1 == c2 && c2 == c3 && c1 == c3)(Assertion.isTrue)
+      assert(c1 == c2 && c2 == c3 && c1 == c3)
     },
     test("chunk symmetry") {
       val c1 = Chunk(1, 2, 3)
       val c2 = Chunk(1, 2, 3)
-      assert(c1 == c2 && c2 == c1)(Assertion.isTrue)
+      assert(c1 == c2 && c2 == c1)
     },
     test("chunk reflexivity") {
       val c1 = Chunk(1, 2, 3)
-      assert(c1 == c1)(Assertion.isTrue)
+      assert(c1 == c1)
     },
     test("chunk negation") {
       val c1 = Chunk(1, 2, 3)
       val c2 = Chunk(1, 2, 3)
-      assert(c1 != c2 == !(c1 == c2))(Assertion.isTrue)
+      assert(c1 != c2 == !(c1 == c2))
     },
     test("chunk substitutivity") {
       val c1 = Chunk(1, 2, 3)
       val c2 = Chunk(1, 2, 3)
-      assert(c1 == c2 && c1.toString == c2.toString)(Assertion.isTrue)
+      assert(c1 == c2 && c1.toString == c2.toString)
     },
     test("chunk consistency") {
       val c1 = Chunk(1, 2, 3)
       val c2 = Chunk(1, 2, 3)
-      assert(c1 == c2 && c1.hashCode == c2.hashCode)(Assertion.isTrue)
+      assert(c1 == c2 && c1.hashCode == c2.hashCode)
     },
     test("nullArrayBug") {
       val c = Chunk.fromArray(Array(1, 2, 3, 4, 5))
