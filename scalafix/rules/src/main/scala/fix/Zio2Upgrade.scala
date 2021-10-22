@@ -20,6 +20,7 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
       "bracket_"               -> "acquireRelease",
       "checkM"                 -> "check",
       "checkNM"                -> "checkN",
+      "checkAllM"              -> "checkAll",
       "collectAllPar_"         -> "collectAllParDiscard",
       "collectAll_"            -> "collectAllDiscard",
       "collectM"               -> "collectZIO",
@@ -54,6 +55,8 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
       "halt"                   -> "failCause",
       "haltWith"               -> "failCauseWith",
       "ifM"                    -> "ifZIO",
+      "interrupted"            -> "isInterrupted",
+      "lockExecutionContext"   -> "onExecutionContext", // Hard to test, because this only existed in a non-deprecated state in an earlier milestone
       "loop_"                  -> "loopDiscard",
       "makeReserve"            -> "fromReservationZIO",
       "mapConcatM"             -> "mapConcatZIO",
@@ -61,7 +64,10 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
       "mapM"                   -> "mapZIO",
       "mapMPar"                -> "mapZIOPar",
       "mapMParUnordered"       -> "mapZIOParUnordered",
+      // TODO Update ZIO.on deprecation notice to also direct to onExecutionContext, instead of the also-deprecated lockExecutionContext
+      "on"                     -> "onExecutionContext",
       "optional"               -> "unsome",
+      "unoption"               -> "unsome",
       "paginateChunkM"         -> "paginateChunkZIO",
       "paginateM"              -> "paginateZIO",
       "partitionPar_"          -> "partitionParDiscard",
@@ -100,6 +106,7 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
     "zio.test.DefaultRunnableSpec",
     "zio.Exit",
     "zio.ZIO",
+    "zio.Cause",
     "zio.IO",
     "zio.Managed",
     "zio.RIO",
@@ -218,6 +225,7 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
   val TestConsoleService_Old      = SymbolMatcher.normalized("zio/test/environment/package.TestConsole.Service#")
   val TestRandom_Old      = SymbolMatcher.normalized("zio/test/environment/package.TestRandom#")
   val TestRandomService_Old      = SymbolMatcher.normalized("zio/test/environment/package.TestRandom.Service#")
+  val FiberId_Old      = SymbolMatcher.normalized("zio/Fiber.Id#")
 
   val Blocking_Old_Exact   = SymbolMatcher.exact("zio/blocking/package.Blocking#")
   val Random_Old_Exact     = SymbolMatcher.exact("zio/random/package.Random#")
@@ -241,6 +249,8 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
   val TestConsoleService_Old_Exact      = SymbolMatcher.exact("zio/test/environment/package.TestConsole.Service#")
   val TestRandom_Old_Exact      = SymbolMatcher.exact("zio/test/environment/package.TestRandom#")
   val TestRandomService_Old_Exact      = SymbolMatcher.exact("zio/test/environment/package.TestRandom.Service#")
+  
+  val FiberId_Old_Exact      = SymbolMatcher.exact("zio/Fiber.Id#")
 
   val hasImport    = Symbol("zio/Has#")
   val newRandom    = Symbol("zio/Random#")
@@ -256,6 +266,8 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
   val newTestSystem      = Symbol("zio/test/environment/TestSystem#")
   val newTestConsole      = Symbol("zio/test/environment/TestConsole#")
   val newTestRandom      = Symbol("zio/test/environment/TestRandom#")
+
+  val newFiberId      = Symbol("zio/FiberId#")
 
   val Clock_Old_Package   = SymbolMatcher.normalized("zio.clock")
   val Random_Old_Package  = SymbolMatcher.normalized("zio.random")
@@ -292,7 +304,9 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
     "zio.clock.localDateTime"   -> "zio.Clock.localDateTime",
     "zio.clock.currentTime"     -> "zio.Clock.currentTime",
     "zio.clock.currentDateTime" -> "zio.Clock.currentDateTime",
+    // These entries cannot be handled.
     // Intentionally removed. It breaks because of the different depth. It was not forgotten
+    // "zio.internal.Execute" -> "zio.Executor"
     //    "zio.duration.Duration"     -> "zio.Duration",
     // Random
     "zio.random.nextString"        -> "zio.Random.nextString",
@@ -463,8 +477,11 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
           Patch.addGlobalImport(newConsole)
 
       case t @ Blocking_Old_Exact(Name(_)) =>
-        Patch.addGlobalImport(newRandom) +
           Patch.replaceTree(unwindSelect(t), s"Any")
+
+      case t @ FiberId_Old_Exact(Name(_)) =>
+        Patch.replaceTree(unwindSelect(t), "FiberId") +
+          Patch.addGlobalImport(newFiberId)
 
       case t @ Random_Old_Exact(Name(_)) =>
         Patch.addGlobalImport(hasImport) +
@@ -540,12 +557,25 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
         Random_Old(_) | Clock_Old(_) | Console_Old(_) | System_Old(_) | Sized_Old(_) | SizedService_Old(_) | 
         Live_Old(_) | TestConfig_Old(_) | TestConfigService_Old(_) | TestSystem_Old(_) | TestSystemService_Old(_) | 
         TestConsole_Old(_) | TestConsoleService_Old(_) | TestRandom_Old(_) | TestRandomService_Old(_) | 
-        TestAnnotations_Old(_) | TestAnnotationsService_Old(_) | TestLogger_Old(_) | TestLoggerService_Old(_)) =>
+        TestAnnotations_Old(_) | TestAnnotationsService_Old(_) | TestLogger_Old(_) | TestLoggerService_Old(_) | FiberId_Old(_)) =>
         Patch.removeImportee(t)
 
       case t @ q"import zio.console._" =>
         Patch.replaceTree(t, "") +
           Patch.addGlobalImport(wildcardImport(q"zio.Console"))
+
+      case t @ q"Fiber.Id" =>
+        Patch.replaceTree(t, "FiberId") +
+          Patch.addGlobalImport(Symbol("zio/FiberId#"))
+
+      // TODO Safe to do for many similar types?
+      case t @ q"zio.duration.Duration" =>
+        Patch.replaceTree(t, "zio.Duration") +
+          Patch.addGlobalImport(Symbol("zio/Duration#"))
+        
+      case t @ q"zio.random.Random" =>
+        Patch.replaceTree(t, "zio.Random") +
+          Patch.addGlobalImport(Symbol("zio/Random#"))
     }.asPatch + replaceSymbols
 
   private def wildcardImport(ref: Term.Ref): Importer =

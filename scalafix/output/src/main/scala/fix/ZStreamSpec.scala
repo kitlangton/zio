@@ -30,6 +30,10 @@ object ZStreamSpec extends DefaultRunnableSpec {
             val stream = ZStream.fromIterable(xs.map(Right(_)))
             assertM(stream.absolve.runCollect)(equalTo(xs))
           }),
+          test("happy path all")(checkAll(tinyChunkOf(Gen.int)) { xs =>
+            val stream = ZStream.fromIterable(xs.map(Right(_)))
+            assertM(stream.absolve.runCollect)(equalTo(xs))
+          }),
           test("failure")(check(tinyChunkOf(Gen.int)) { xs =>
             val stream = ZStream.fromIterable(xs.map(Right(_))) ++ ZStream.succeed(Left("Ouch"))
             assertM(stream.absolve.runCollect.exit)(fails(equalTo("Ouch")))
@@ -2110,7 +2114,7 @@ object ZStreamSpec extends DefaultRunnableSpec {
                 .mapZIOPar(8)(_ => ZIO(1).repeatN(2000))
                 .runDrain
                 .exit
-                .map(_.interrupted)
+                .map(_.isInterrupted)
             )(equalTo(false))
           } @@ nonFlaky(10) @@ TestAspect.jvmOnly,
           test("interrupts pending tasks when one of the tasks fails") {

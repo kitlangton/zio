@@ -4,7 +4,7 @@ import zio._
 
 
 import zio.test.Gen
-import zio.Console
+import zio.{ Console, Duration, FiberId, Has, Random }
 import zio.Console._
 import zio.ZIO.attemptBlockingIO
 import zio.test.Gen
@@ -68,4 +68,14 @@ object Zio2Renames {
 
   // Blocking
   attemptBlockingIO(1)
+
+  ZIO.succeed(1).onExecutionContext _
+
+  Cause.fail("Die").isInterrupted
+
+  FiberId
+
+  zio.Duration
+  
+  val x: Layer[Nothing, Has[Random]] = zio.Random.live
 }
