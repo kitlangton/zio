@@ -2067,7 +2067,7 @@ object ZStreamSpec extends DefaultRunnableSpec {
         ),
         suite("mapMPar")(
           test("foreachParN equivalence") {
-            checkNM(10)(Gen.small(Gen.listOfN(_)(Gen.byte)), Gen.function(Gen.successes(Gen.byte))) { (data, f) =>
+            checkN(10)(Gen.small(Gen.listOfN(_)(Gen.byte)), Gen.function(Gen.successes(Gen.byte))) { (data, f) =>
               val s = ZStream.fromIterable(data)
 
               for {
@@ -3962,7 +3962,7 @@ object ZStreamSpec extends DefaultRunnableSpec {
               result <- ref.get
             } yield assert(result)(equalTo(List(1, 1)))
           ),
-          test("allow schedule rely on effect value")(checkNM(10)(Gen.int(1, 100)) { (length: Int) =>
+          test("allow schedule rely on effect value")(checkN(10)(Gen.int(1, 100)) { (length: Int) =>
             for {
               ref     <- Ref.make(0)
               effect   = ref.getAndUpdate(_ + 1).filterOrFail(_ <= length + 1)(())

@@ -19,6 +19,7 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
       "bracket_"               -> "acquireRelease",
       "bracket_"               -> "acquireRelease",
       "checkM"                 -> "check",
+      "checkNM"                -> "checkN",
       "collectAllPar_"         -> "collectAllParDiscard",
       "collectAll_"            -> "collectAllDiscard",
       "collectM"               -> "collectZIO",
