@@ -7,6 +7,8 @@ import zio._
 import zio.blocking.effectBlockingIO
 import zio.blocking._
 import zio.console._
+import zio.duration.Duration
+import zio.internal.Platform
 import zio.test.Gen
 
 object Zio2Renames {
@@ -78,4 +80,12 @@ object Zio2Renames {
   zio.duration.Duration
   
   val x: Layer[Nothing, zio.random.Random] = zio.random.Random.live
+
+  zio.internal.Executor
+
+  Platform
+    .fromExecutor(???)
+  
+  zio.internal.Platform
+    .fromExecutor(???)
 }

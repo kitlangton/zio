@@ -367,7 +367,7 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
     "zio.test.TimeVariants.anyZoneOffset" -> "zio.test.Gen.zoneOffset",
     "zio.test.TimeVariants.anyZoneId" -> "zio.test.Gen.zoneId",
     // App
-    "zio.App" -> "zio.ZIOAppDefault"
+    "zio.App" -> "zio.ZIOAppDefault",
   )
 
   val foreachParN             = ParNRenamer("foreachPar", 3)
@@ -569,13 +569,30 @@ class Zio2Upgrade extends SemanticRule("Zio2Upgrade") {
           Patch.addGlobalImport(Symbol("zio/FiberId#"))
 
       // TODO Safe to do for many similar types?
+      case t @ q"import zio.duration.Duration" =>
+        Patch.replaceTree(t, "import zio.Duration")
+
       case t @ q"zio.duration.Duration" =>
-        Patch.replaceTree(t, "zio.Duration") +
-          Patch.addGlobalImport(Symbol("zio/Duration#"))
+        Patch.replaceTree(t, "zio.Duration")
         
       case t @ q"zio.random.Random" =>
-        Patch.replaceTree(t, "zio.Random") +
-          Patch.addGlobalImport(Symbol("zio/Random#"))
+        Patch.replaceTree(t, "zio.Random")
+
+      case t @ q"zio.internal.Executor" =>
+        Patch.replaceTree(t, "zio.Executor")
+
+      case t @ q"Platform.fromExecutor" =>
+        Patch.replaceTree(t, "RuntimeConfig.fromExecutor")
+        
+      case t @ q"zio.internal.Platform" =>
+        Patch.replaceTree(t, "zio.RuntimeConfig")
+
+      case t @ q"zio.internal.Tracing" =>
+        Patch.replaceTree(t, "zio.internal.tracing.Tracing")
+        
+      case t @ q"import zio.internal.Tracing" =>
+        Patch.replaceTree(t, "import zio.internal.tracing.Tracing")
+
     }.asPatch + replaceSymbols
 
   private def wildcardImport(ref: Term.Ref): Importer =

@@ -425,7 +425,7 @@ object ZIOSpec extends DefaultRunnableSpec {
     ),
     suite("executor")(
       test("retrieves the current executor for this effect") {
-        val executor = zio.internal.Executor.fromExecutionContext(100) {
+        val executor = zio.Executor.fromExecutionContext(100) {
           scala.concurrent.ExecutionContext.Implicits.global
         }
         for {
@@ -3063,7 +3063,7 @@ object ZIOSpec extends DefaultRunnableSpec {
         } yield assert(v)(equalTo(InterruptStatus.uninterruptible))
       },
       test("executor is heritable") {
-        val executor = zio.internal.Executor.fromExecutionContext(100) {
+        val executor = zio.Executor.fromExecutionContext(100) {
           scala.concurrent.ExecutionContext.Implicits.global
         }
         val pool = ZIO.succeed(Platform.getCurrentThreadGroup)
