@@ -120,14 +120,6 @@ package object test extends CompileVariants {
 
   type TestResult = BoolAlgebra[AssertionResult]
 
-  object TestResult {
-    implicit def trace2TestResult(assert: Assert): TestResult = {
-      val trace = TestArrow.run(assert.arrow, Right(()))
-      if (trace.isSuccess) BoolAlgebra.success(AssertionResult.TraceResult(trace))
-      else BoolAlgebra.failure(AssertionResult.TraceResult(trace))
-    }
-  }
-
   /**
    * A `TestReporter[E]` is capable of reporting test results with error type
    * `E`.

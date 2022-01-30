@@ -37,13 +37,21 @@ ${indent(body.mkString(",\n"))}
     case product: Product =>
       val name    = product.productPrefix
       val labels0 = labels(product)
-      val body = labels0
+      val body0 = labels0
         .zip(product.productIterator)
         .map { case (key, value) =>
           s"$key = ${PrettyPrint(value)}"
         }
         .toList
-        .mkString(",\n")
+
+      val flat = body0.mkString(", ")
+
+      val body =
+        if (flat.length > 50)
+          body0.mkString(",\n")
+        else
+          flat
+
       val isMultiline  = body.split("\n").length > 1
       val indentedBody = indent(body, if (isMultiline) 2 else 0)
       val spacer       = if (isMultiline) "\n" else ""
