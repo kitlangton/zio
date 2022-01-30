@@ -17,71 +17,52 @@ sealed trait Trace[+A] { self =>
   /**
    * Apply the metadata to the rightmost node in the trace.
    */
-  final def withSpan(span: Option[Span] = None): Trace[A] = if (span.isDefined) {
-    self match {
-      case node: Trace.Node[_]        => node.copy(span = span)
-      case Trace.AndThen(left, right) => Trace.AndThen(left, right.withSpan(span))
-      case zip                        => zip
-    }
-  } else {
-    self
-  }
-
-  /**
-   * Apply the parent span to every node in the tree.
-   */
-  def withParentSpan(span: Option[Span]): Trace[A] = if (span.isDefined) {
-    self match {
-      case node: Trace.Node[_] =>
-        node.copy(parentSpan = node.parentSpan.orElse(span))
-      case Trace.AndThen(left, right) =>
-        Trace.AndThen(left.withParentSpan(span), right.withParentSpan(span))
-      case and: Trace.And =>
-        Trace.And(and.left.withParentSpan(span), and.right.withParentSpan(span)).asInstanceOf[Trace[A]]
-      case or: Trace.Or =>
-        Trace.Or(or.left.withParentSpan(span), or.right.withParentSpan(span)).asInstanceOf[Trace[A]]
-      case not: Trace.Not =>
-        Trace.Not(not.trace.withParentSpan(span)).asInstanceOf[Trace[A]]
-    }
-  } else {
-    self
-  }
+  final def withSpan(span: Option[Span] = None): Trace[A] =
+    if (span.isDefined)
+      self match {
+        case node: Trace.Node[_]        => node.copy(span = span)
+        case Trace.AndThen(left, right) => Trace.AndThen(left, right.withSpan(span))
+        case zip                        => zip
+      }
+    else
+      self
 
   /**
    * Apply the location to every node in the tree.
    */
-  def withLocation(location: Option[String]): Trace[A] = if (location.isDefined) {
-    self match {
-      case node: Trace.Node[_] =>
-        node.copy(location = location, children = node.children.map(_.withLocation(location)))
-      case Trace.AndThen(left, right) =>
-        Trace.AndThen(left.withLocation(location), right.withLocation(location))
-      case and: Trace.And =>
-        Trace.And(and.left.withLocation(location), and.right.withLocation(location)).asInstanceOf[Trace[A]]
-      case or: Trace.Or =>
-        Trace.Or(or.left.withLocation(location), or.right.withLocation(location)).asInstanceOf[Trace[A]]
-      case not: Trace.Not =>
-        Trace.Not(not.trace.withLocation(location)).asInstanceOf[Trace[A]]
-    }
-  } else {
-    self
-  }
+  def withLocation(location: Option[String]): Trace[A] =
+    if (location.isDefined)
+      transform(node => node.copy(location = location, children = node.children.map(_.withLocation(location))))
+    else
+      self
+
+  /**
+   * Apply the parent span to every node in the tree.
+   */
+  def withParentSpan(span: Option[Span]): Trace[A] =
+    if (span.isDefined)
+      transform(node => node.copy(parentSpan = span))
+    else
+      self
 
   /**
    * Apply the code to every node in the tree.
    */
   final def withCode(code: Option[String]): Trace[A] =
+    transform(node => node.copy(fullCode = code, children = node.children.map(_.withCode(code))))
+
+  def transform(f: Trace.Node[_] => Trace.Node[_]): Trace[A] =
     self match {
       case node: Trace.Node[_] =>
-        node.copy(fullCode = code, children = node.children.map(_.withCode(code)))
+        f(node).asInstanceOf[Trace[A]]
       case Trace.AndThen(left, right) =>
-        Trace.AndThen(left.withCode(code), right.withCode(code))
+        Trace.AndThen(left.transform(f), right.transform(f))
       case and: Trace.And =>
-        Trace.And(and.left.withCode(code), and.right.withCode(code)).asInstanceOf[Trace[A]]
+        Trace.And(and.left.transform(f), and.right.transform(f)).asInstanceOf[Trace[A]]
       case or: Trace.Or =>
-        Trace.Or(or.left.withCode(code), or.right.withCode(code)).asInstanceOf[Trace[A]]
+        Trace.Or(or.left.transform(f), or.right.transform(f)).asInstanceOf[Trace[A]]
       case not: Trace.Not =>
-        Trace.Not(not.trace.withCode(code)).asInstanceOf[Trace[A]]
+        Trace.Not(not.trace.transform(f)).asInstanceOf[Trace[A]]
     }
 
   @tailrec
@@ -91,15 +72,6 @@ sealed trait Trace[+A] { self =>
       case Trace.AndThen(_, right) => right.annotate(annotation: _*)
       case zip                     => zip
     }
-
-  final def implies(that: Trace[Boolean])(implicit ev: A <:< Boolean): Trace[Boolean] =
-    !self || that
-
-  final def ==>(that: Trace[Boolean])(implicit ev: A <:< Boolean): Trace[Boolean] =
-    implies(that)
-
-  final def <==>(that: Trace[Boolean])(implicit ev: A <:< Boolean): Trace[Boolean] =
-    self ==> that && that ==> self.asInstanceOf[Trace[Boolean]]
 
   final def &&(that: Trace[Boolean])(implicit ev: A <:< Boolean): Trace[Boolean] =
     Trace.And(self.asInstanceOf[Trace[Boolean]], that)
@@ -217,14 +189,6 @@ object Trace {
 
   def die(throwable: Throwable): Trace[Nothing] =
     Node(Result.die(throwable), message = ErrorMessage.throwable(throwable))
-
-  object Halt {
-    def unapply[A](trace: Trace[A]): Boolean =
-      trace.result match {
-        case Result.Fail => true
-        case _           => false
-      }
-  }
 
   object Fail {
     def unapply[A](trace: Trace[A]): Option[Throwable] =
