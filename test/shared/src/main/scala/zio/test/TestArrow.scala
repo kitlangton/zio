@@ -51,8 +51,8 @@ sealed trait TestArrow[-A, +B] { self =>
       Meta(assert = self, span = span, parentSpan = parentSpan, code = code, location = location)
   }
 
-  def span(span: (Int, Int)): TestArrow[A, B] =
-    meta(span = Some(Span(span._1, span._2)))
+  def span(span: Span): TestArrow[A, B] =
+    meta(span = Some(span))
 
   def withCode(code: String): TestArrow[A, B] =
     meta(code = Some(code))
@@ -81,11 +81,14 @@ sealed trait TestArrow[-A, +B] { self =>
 
 object TestArrow {
 
-  def succeed[A](value: => A): TestArrow[Any, A] = TestArrowF(_ => Trace.succeed(value))
+  def succeed[A](value: => A, span: Span): TestArrow[Any, A] =
+    TestArrowF[Any, A](_ => Trace.succeed(value)).span(span)
 
-  def fromFunction[A, B](f: A => B): TestArrow[A, B] = make(f andThen Trace.succeed)
+  def fromFunction[A, B](f: A => B, span: Span): TestArrow[A, B] =
+    make[A, B](f andThen Trace.succeed).span(span)
 
-  def suspend[A, B](f: A => TestArrow[Any, B]): TestArrow[A, B] = TestArrow.Suspend(f)
+  def suspend[A, B](f: A => TestArrow[Any, B], span: Span): TestArrow[A, B] =
+    TestArrow.Suspend[A, B](f).span(span)
 
   def make[A, B](f: A => Trace[B]): TestArrow[A, B] =
     makeEither(e => Trace.die(e).annotate(Trace.Annotation.Rethrow), f)
@@ -144,6 +147,10 @@ object TestArrow {
   case class Span(start: Int, end: Int) {
     def substring(str: String): String = str.substring(start, end)
 
+  }
+
+  object Span {
+    implicit def tupleToSpan(tuple: (Int, Int)): Span = Span(tuple._1, tuple._2)
   }
 
   case class Meta[-A, +B](

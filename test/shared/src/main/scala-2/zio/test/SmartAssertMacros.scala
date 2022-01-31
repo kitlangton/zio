@@ -44,8 +44,8 @@ class SmartAssertMacros(val c: blackbox.Context) {
       args: Option[List[c.Tree]],
       span: (Int, Int)
     ) extends AST
-    case class Function(lhs: c.Tree, rhs: AST, lhsTpe: Type, span: (Int, Int)) extends AST
-    case class Raw(ast: c.Tree, span: (Int, Int))                              extends AST
+    case class Function(lhs: c.Tree, rhs: AST, span: (Int, Int)) extends AST
+    case class Raw(ast: c.Tree, span: (Int, Int))                extends AST
   }
 
   case class AssertAST(name: String, tpes: List[Type] = List.empty, args: List[c.Tree] = List.empty)
@@ -123,46 +123,46 @@ class SmartAssertMacros(val c: blackbox.Context) {
       case AST.Method(lhs, _, _, "is", _, Some(List(arg)), _) if arg.tpe.typeArgs.head <:< weakTypeOf[TestLens[_]] =>
         val assertion = astToAssertion(lhs)
         parseExpr(arg) match {
-          case AST.Function(_, rhs, _, _) => parseAsAssertion(rhs)(assertion)
-          case _                          => throw new Error("This is not possible.")
+          case AST.Function(_, rhs, _) => parseAsAssertion(rhs)(assertion)
+          case _                       => throw new Error("This is not possible.")
         }
 
       case AST.Method(lhs, lhsTpe, _, "forall", _, Some(args), span) if lhsTpe <:< weakTypeOf[Iterable[_]] =>
-        val assertion = astToAssertion(parseExpr(args.head))
-        q"${astToAssertion(lhs)} >>> $SA.forallIterable($assertion).span($span)"
+        val assertion = parseSuspend(args.head, lhsTpe.typeArgs.head)
+        q"${astToAssertion(lhs)} >>> $SA.forallIterable($assertion)"
 
       case AST.Method(lhs, lhsTpe, _, "exists", _, Some(args), span) if lhsTpe <:< weakTypeOf[Iterable[_]] =>
-        val assertion = astToAssertion(parseExpr(args.head))
-        q"${astToAssertion(lhs)} >>> $SA.existsIterable($assertion).span($span)"
+        val assertion = parseSuspend(args.head, lhsTpe.typeArgs.head)
+        q"${astToAssertion(lhs)} >>> $SA.existsIterable[${lhsTpe.typeArgs.head}]($assertion)"
 
       case Matcher(lhs, ast, span) =>
         val tree = AssertAST.toTree(ast)
-        q"${astToAssertion(lhs)} >>> $tree.span($span)"
+        q"${astToAssertion(lhs)} >>> $tree"
 
-      case AST.Method(lhs, lhsTpe, _, name, tpes, args, span) =>
+      case AST.Method(lhs, lhsTpe, rhsTpe, name, tpes, args, span) =>
         val select =
           args match {
             case Some(args) =>
-              c.untypecheck(q"{ (a: $lhsTpe) => a.${TermName(name)}[..$tpes](..$args) }")
+              c.untypecheck(q"{ (a) => a.${TermName(name)}[..$tpes](..$args) }")
             case None =>
-              c.untypecheck(q"{ (a: $lhsTpe) => a.${TermName(name)}[..$tpes] }")
+              c.untypecheck(q"{ (a) => a.${TermName(name)}[..$tpes] }")
           }
 
-        q"${astToAssertion(lhs)} >>> $Arrow.fromFunction($select).span($span)"
+        q"${astToAssertion(lhs)} >>> $Arrow.fromFunction($select, $span)"
 
-      case AST.Function(lhs, rhs, _, span) =>
+      case AST.Function(lhs, rhs, span) =>
         val rhsAssert = astToAssertion(rhs)
         val select    = c.untypecheck(q"{ ($lhs) => $rhsAssert }")
-        q"$Arrow.suspend($select).span($span)"
+        q"$Arrow.suspend($select, $span)"
 
       case AST.Raw(ast, span) =>
-        q"$Arrow.succeed($ast).span($span)"
+        q"$Arrow.succeed($ast, $span)"
     }
 
   case class PositionContext(start: Int, codeString: String) {
     def getPos(tree: c.Tree): (Int, Int) = (getStart(tree), getEnd(tree))
-    def getEnd(tree: c.Tree): Int        = tree.pos.end - start
-    def getStart(tree: c.Tree): Int      = tree.pos.start - start
+    def getEnd(tree: c.Tree): Int        = scala.util.Try(tree.pos.end - start).getOrElse(0)
+    def getStart(tree: c.Tree): Int      = scala.util.Try(tree.pos.start - start).getOrElse(0)
   }
 
   @silent("never used")
@@ -191,12 +191,44 @@ class SmartAssertMacros(val c: blackbox.Context) {
         )
 
       case fn @ q"($a) => $b" =>
-        val inType = fn.tpe.widen.typeArgs.head
-        AST.Function(a, parseExpr(b), inType, (pos.getStart(tree), end))
+        AST.Function(a, parseExpr(b), (pos.getStart(tree), end))
 
       case _ => AST.Raw(tree, (pos.getStart(tree), end))
     }
   }
+
+  def parseSuspend(tree: c.Tree, inputType: c.Type)(implicit positionContext: PositionContext) =
+    tree match {
+      case q"($arg) => $body" =>
+        val name = arg match {
+          case ValDef(mods, name, _, body) =>
+            println(s"NAME ${name.toString}")
+            ValDef(mods, name, q"$inputType", body)
+            name
+        }
+//
+        object transform extends Transformer {
+          override def transform(tree: c.universe.Tree): c.universe.Tree = {
+            println(s"TRANSFORM:\n${showRaw(tree)}\n${show(tree)}")
+            tree match {
+              case Ident(n) if n == name =>
+                println(s"MATCH: $name")
+                Ident(TermName("_the_arg_"))
+              case _ =>
+                super.transform(tree)
+            }
+          }
+        }
+
+        val res = transform.transform(body)
+        println("HELLO")
+        println(show(res))
+
+        val parsedBody = astToAssertion(parseExpr(res))
+        val select     = c.typecheck(q"{ (${TermName("_the_arg_")}: $inputType) => $parsedBody }")
+        println(show(select))
+        q"$Arrow.suspend($select, (0,0))"
+    }
 
   def assertOne_impl(expr: Expr[Boolean]): c.Tree = {
     val (stmts, tree) = expr.tree match {
