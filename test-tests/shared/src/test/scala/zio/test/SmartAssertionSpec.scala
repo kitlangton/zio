@@ -449,7 +449,7 @@ object SmartAssertionSpec extends ZIOBaseSpec {
         trait Parent
         case class Child(x: String) extends Parent
         val someParent: Option[Parent] = Some(Child("hii"))
-        val someChild                  = Child("hii")
+        val someChild                  = Child("hiii")
         assertTrue(someParent.contains(someChild))
       },
       test("failure") {
@@ -476,7 +476,13 @@ object SmartAssertionSpec extends ZIOBaseSpec {
         val option: Option[Nothing] = Option.empty
         assertTrue(option == None)
       }
-    }
+    },
+    test("missing element") {
+      assertTrue(company.users(8).posts.exists(_.title == "hiii"))
+    } @@ failing,
+    test("fails predicate") {
+      assertTrue(company.users.head.posts.forall(_.title == "Post #0"))
+    } @@ failing
   )
 
   // The implicit trace will be used by assertTrue to report the
