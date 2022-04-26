@@ -881,7 +881,22 @@ package object test extends CompileVariants {
      */
     def subtype[Subtype <: A]: TestLens[Subtype] = throw SmartAssertionExtensionError()
 
-    def throwing: TestLens[Throwable] = throw SmartAssertionExtensionError()
+    /**
+     * Catches exceptions thrown by the preceding expressions, and returns the
+     * Throwable. This will fail if the preceding expressions do not throw an
+     * exception.
+     *
+     * {{{
+     *   def boom: Int = new Exception("Boom")
+     *   assertTrue(boom.is(_.throws).getMessage == "Boom") // succeeds
+     *   assertTrue("hello".is(_.throws).getMessage == "Boom") // fails
+     * }}}
+     */
+    def throws: TestLens[Throwable] = throw SmartAssertionExtensionError()
+
+    // TODO: Add more methods here
+    //    def throwsA[E <: Throwable](implicit dummyImplicit: DummyImplicit): TestLens[E] =
+    //      throw SmartAssertionExtensionError()
 
     /**
      * Transforms a value with the given [[CustomAssertion]]

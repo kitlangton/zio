@@ -72,7 +72,11 @@ class SmartAssertMacros(ctx: Quotes)  {
         val arrow = transformAs[Start, a](lhs.asInstanceOf[Expr[TestLens[a]]])(start)
         '{ $arrow >>> SmartAssertions.anything }
 
-      case '{ type a; TestLensAnyOps($lhs: TestLens[`a`]).custom($customAssertion: CustomAssertion[`a`, End]) } =>
+     case '{ TestLensAnyOps($lhs: TestLens[a]).throws } =>
+       val arrow = transformAs[Start, a](lhs.asInstanceOf[Expr[TestLens[a]]])(start)
+       '{ $arrow >>> SmartAssertions.throws }
+
+     case '{ type a; TestLensAnyOps($lhs: TestLens[`a`]).custom($customAssertion: CustomAssertion[`a`, End]) } =>
         val arrow = transformAs[Start, a](lhs.asInstanceOf[Expr[TestLens[a]]])(start)
         '{ $arrow >>> SmartAssertions.custom[a, End]($customAssertion) }
 

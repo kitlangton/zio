@@ -407,6 +407,13 @@ object SmartAssertionSpec extends ZIOBaseSpec {
           val option: Option[Color] = Option(Blue("hello"))
           assertTrue(option.is(_.some.subtype[Red]).foo == 188)
         }
+      ),
+      suite("throwable")(
+        test("success") {
+          final case class MyException(msg: String) extends Throwable
+          def boom: Int = throw MyException("boom")
+          assertTrue(boom.is(_.throws) == MyException("boom"))
+        }
       )
     ) @@ failing,
     suite("is anything")(
