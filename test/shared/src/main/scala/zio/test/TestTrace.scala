@@ -3,15 +3,13 @@ package zio.test
 import zio.stacktracer.TracingImplicits.disableAutoTrace
 import zio.test.TestArrow.Span
 
-import scala.annotation.tailrec
-
-sealed trait TestTrace[+A] { self =>
+private[test] sealed trait TestTrace[+A] { self =>
 
   def values: List[Any] =
     self.asInstanceOf[TestTrace[Any]] match {
-      case TestTrace.Node(Result.Succeed(value), _, _, _, _, _, _, _, _, _, _) =>
+      case TestTrace.Node(Result.Succeed(value), _, _, _, _, _, _, _, _, _) =>
         List(value)
-      case TestTrace.Node(_, _, _, _, _, _, _, _, _, _, _) =>
+      case TestTrace.Node(_, _, _, _, _, _, _, _, _, _) =>
         List()
       case TestTrace.AndThen(left, right) =>
         left.values ++ right.values
@@ -30,12 +28,11 @@ sealed trait TestTrace[+A] { self =>
 
   def isDie: Boolean =
     self.asInstanceOf[TestTrace[_]] match {
-      case TestTrace.Node(Result.Die(_), _, _, _, _, _, _, _, _, _, _) => true
-      case TestTrace.Node(_, _, _, _, _, _, _, _, _, _, _)             => false
-      case TestTrace.AndThen(left, right)                              => left.isDie || right.isDie
-      case TestTrace.And(left, right)                                  => left.isDie || right.isDie
-      case TestTrace.Or(left, right)                                   => left.isDie || right.isDie
-      case TestTrace.Not(trace)                                        => trace.isDie
+      case node: TestTrace.Node[_]        => node.result.isDie
+      case TestTrace.AndThen(left, right) => left.isDie || right.isDie
+      case TestTrace.And(left, right)     => left.isDie || right.isDie
+      case TestTrace.Or(left, right)      => left.isDie || right.isDie
+      case TestTrace.Not(trace)           => trace.isDie
     }
 
   /**
@@ -51,142 +48,69 @@ sealed trait TestTrace[+A] { self =>
     self
   }
 
+  private def modifyNode[_](f: TestTrace.Node[_] => TestTrace.Node[_]): TestTrace[A] =
+    self match {
+      case node: TestTrace.Node[_] =>
+        f(node).asInstanceOf[TestTrace[A]]
+      case TestTrace.AndThen(left, right) =>
+        TestTrace.AndThen(left.modifyNode(f), right.modifyNode(f))
+      case and: TestTrace.And =>
+        TestTrace.And(and.left.modifyNode(f), and.right.modifyNode(f)).asInstanceOf[TestTrace[A]]
+      case or: TestTrace.Or =>
+        TestTrace.Or(or.left.modifyNode(f), or.right.modifyNode(f)).asInstanceOf[TestTrace[A]]
+      case not: TestTrace.Not =>
+        TestTrace.Not(not.trace.modifyNode(f)).asInstanceOf[TestTrace[A]]
+    }
+
   /**
    * Apply the parent span to every node in the tree.
    */
-  def withParentSpan(span: Option[Span]): TestTrace[A] = if (span.isDefined) {
-    self match {
-      case node: TestTrace.Node[_] =>
-        node.copy(parentSpan = node.parentSpan.orElse(span))
-      case TestTrace.AndThen(left, right) =>
-        TestTrace.AndThen(left.withParentSpan(span), right.withParentSpan(span))
-      case and: TestTrace.And =>
-        TestTrace.And(and.left.withParentSpan(span), and.right.withParentSpan(span)).asInstanceOf[TestTrace[A]]
-      case or: TestTrace.Or =>
-        TestTrace.Or(or.left.withParentSpan(span), or.right.withParentSpan(span)).asInstanceOf[TestTrace[A]]
-      case not: TestTrace.Not =>
-        TestTrace.Not(not.trace.withParentSpan(span)).asInstanceOf[TestTrace[A]]
+  def withParentSpan(span: Option[Span]): TestTrace[A] =
+    span.fold(self) { parentSpan =>
+      modifyNode(node => node.copy(span = node.parentSpan.orElse(Some(parentSpan))))
     }
-  } else {
-    self
-  }
 
   /**
    * Apply the location to every node in the tree.
    */
-  def withLocation(location: Option[String]): TestTrace[A] = if (location.isDefined) {
-    self match {
-      case node: TestTrace.Node[_] =>
-        node.copy(location = location, children = node.children.map(_.withLocation(location)))
-      case TestTrace.AndThen(left, right) =>
-        TestTrace.AndThen(left.withLocation(location), right.withLocation(location))
-      case and: TestTrace.And =>
-        TestTrace.And(and.left.withLocation(location), and.right.withLocation(location)).asInstanceOf[TestTrace[A]]
-      case or: TestTrace.Or =>
-        TestTrace.Or(or.left.withLocation(location), or.right.withLocation(location)).asInstanceOf[TestTrace[A]]
-      case not: TestTrace.Not =>
-        TestTrace.Not(not.trace.withLocation(location)).asInstanceOf[TestTrace[A]]
+  def withLocation(location: Option[String]): TestTrace[A] =
+    location.fold(self) { location =>
+      modifyNode(node => node.copy(location = node.location.orElse(Some(location))))
     }
-  } else {
-    self
-  }
 
   def withCustomLabel(customLabel: Option[String]): TestTrace[A] =
-    if (customLabel.isDefined) {
-      self match {
-        case node: TestTrace.Node[_] =>
-          node.copy(customLabel = customLabel, children = node.children.map(_.withCustomLabel(customLabel)))
-        case TestTrace.AndThen(left, right) =>
-          TestTrace.AndThen(left.withCustomLabel(customLabel), right.withCustomLabel(customLabel))
-        case and: TestTrace.And =>
-          TestTrace
-            .And(and.left.withCustomLabel(customLabel), and.right.withCustomLabel(customLabel))
-            .asInstanceOf[TestTrace[A]]
-        case or: TestTrace.Or =>
-          TestTrace
-            .Or(or.left.withCustomLabel(customLabel), or.right.withCustomLabel(customLabel))
-            .asInstanceOf[TestTrace[A]]
-        case not: TestTrace.Not =>
-          TestTrace.Not(not.trace.withCustomLabel(customLabel)).asInstanceOf[TestTrace[A]]
-      }
-    } else {
-      self
+    customLabel.fold(self) { customLabel =>
+      modifyNode(node => node.copy(customLabel = node.customLabel.orElse(Some(customLabel))))
     }
 
   /**
    * Apply the code to every node in the tree.
    */
   final def withCode(fullCode: Option[String]): TestTrace[A] =
-    self match {
-      case node: TestTrace.Node[_] =>
-        node.copy(fullCode = fullCode.orElse(node.fullCode), children = node.children.map(_.withCode(fullCode)))
-      case TestTrace.AndThen(left, right) =>
-        TestTrace.AndThen(left.withCode(fullCode), right.withCode(fullCode))
-      case and: TestTrace.And =>
-        TestTrace.And(and.left.withCode(fullCode), and.right.withCode(fullCode)).asInstanceOf[TestTrace[A]]
-      case or: TestTrace.Or =>
-        TestTrace.Or(or.left.withCode(fullCode), or.right.withCode(fullCode)).asInstanceOf[TestTrace[A]]
-      case not: TestTrace.Not =>
-        TestTrace.Not(not.trace.withCode(fullCode)).asInstanceOf[TestTrace[A]]
+    fullCode.fold(self) { fullCode =>
+      modifyNode(_.copy(fullCode = Some(fullCode)))
     }
 
   /**
    * Apply the code to every node in the tree.
    */
   final def withCompleteCode(completeCode: Option[String]): TestTrace[A] =
-    self match {
-      case node: TestTrace.Node[_] =>
-        node.copy(completeCode = completeCode, children = node.children.map(_.withCompleteCode(completeCode)))
-      case TestTrace.AndThen(left, right) =>
-        TestTrace.AndThen(left.withCompleteCode(completeCode), right.withCompleteCode(completeCode))
-      case and: TestTrace.And =>
-        TestTrace
-          .And(and.left.withCompleteCode(completeCode), and.right.withCompleteCode(completeCode))
-          .asInstanceOf[TestTrace[A]]
-      case or: TestTrace.Or =>
-        TestTrace
-          .Or(or.left.withCompleteCode(completeCode), or.right.withCompleteCode(completeCode))
-          .asInstanceOf[TestTrace[A]]
-      case not: TestTrace.Not =>
-        TestTrace.Not(not.trace.withCompleteCode(completeCode)).asInstanceOf[TestTrace[A]]
+    completeCode.fold(self) { completeCode =>
+      modifyNode(_.copy(completeCode = Some(completeCode)))
     }
 
   final def withGenFailureDetails(genFailureDetails: Option[GenFailureDetails]): TestTrace[A] =
-    self match {
-      case node: TestTrace.Node[_] =>
-        node.copy(
-          genFailureDetails = node.genFailureDetails.orElse(genFailureDetails),
-          children = node.children.map(_.withGenFailureDetails(genFailureDetails))
-        )
-      case TestTrace.AndThen(left, right) =>
-        TestTrace.AndThen(left.withGenFailureDetails(genFailureDetails), right.withGenFailureDetails(genFailureDetails))
-      case and: TestTrace.And =>
-        TestTrace
-          .And(and.left.withGenFailureDetails(genFailureDetails), and.right.withGenFailureDetails(genFailureDetails))
-          .asInstanceOf[TestTrace[A]]
-      case or: TestTrace.Or =>
-        TestTrace
-          .Or(or.left.withGenFailureDetails(genFailureDetails), or.right.withGenFailureDetails(genFailureDetails))
-          .asInstanceOf[TestTrace[A]]
-      case not: TestTrace.Not =>
-        TestTrace.Not(not.trace.withGenFailureDetails(genFailureDetails)).asInstanceOf[TestTrace[A]]
+    genFailureDetails.fold(self) { genFailureDetails =>
+      modifyNode(node => node.copy(genFailureDetails = node.genFailureDetails.orElse(Some(genFailureDetails))))
     }
 
-  def getGenFailureDetails: Option[GenFailureDetails] =
+  def genFailureDetails: Option[GenFailureDetails] =
     self match {
-      case node: TestTrace.Node[_]        => node.genFailureDetails
-      case TestTrace.AndThen(left, right) => left.getGenFailureDetails.orElse(right.getGenFailureDetails)
-      case and: TestTrace.And             => and.left.getGenFailureDetails.orElse(and.right.getGenFailureDetails)
-      case or: TestTrace.Or               => or.left.getGenFailureDetails.orElse(or.right.getGenFailureDetails)
-      case not: TestTrace.Not             => not.trace.getGenFailureDetails
-    }
-
-  @tailrec
-  final def annotate(annotation: TestTrace.Annotation*): TestTrace[A] =
-    self match {
-      case node: TestTrace.Node[_]     => node.copy(annotations = node.annotations ++ annotation.toSet)
-      case TestTrace.AndThen(_, right) => right.annotate(annotation: _*)
-      case zip                         => zip
+      case node: TestTrace.Node[_]          => node.genFailureDetails
+      case andThen: TestTrace.AndThen[_, _] => andThen.left.genFailureDetails.orElse(andThen.right.genFailureDetails)
+      case and: TestTrace.And               => and.left.genFailureDetails.orElse(and.right.genFailureDetails)
+      case or: TestTrace.Or                 => or.left.genFailureDetails.orElse(or.right.genFailureDetails)
+      case not: TestTrace.Not               => not.trace.genFailureDetails
     }
 
   final def implies(that: TestTrace[Boolean])(implicit ev: A <:< Boolean): TestTrace[Boolean] =
@@ -213,28 +137,24 @@ sealed trait TestTrace[+A] { self =>
   def result: Result[A]
 }
 
-object TestTrace {
+private[test] object TestTrace {
 
   /**
    * Prune all non-failures from the trace.
    */
   def prune(trace: TestTrace[Boolean], negated: Boolean): Option[TestTrace[Boolean]] =
     trace match {
-      case node @ TestTrace.Node(Result.Succeed(bool), _, _, _, _, _, _, _, _, _, _) =>
+      case node @ TestTrace.Node(Result.Succeed(bool), _, _, _, _, _, _, _, _, _) =>
         if (bool == negated) {
           Some(node.copy(children = node.children.flatMap(prune(_, negated))))
         } else
           None
 
-      case TestTrace.Node(Result.Fail, _, _, _, _, _, _, _, _, _, _) =>
+      case TestTrace.Node(Result.Fail, _, _, _, _, _, _, _, _, _) =>
         if (negated) None else Some(trace)
 
-      case TestTrace.Node(Result.Die(_), _, _, _, _, _, _, _, _, _, _) =>
+      case TestTrace.Node(Result.Die(_), _, _, _, _, _, _, _, _, _) =>
         Some(trace)
-
-      case TestTrace.AndThen(left, node: TestTrace.Node[_])
-          if node.annotations.contains(TestTrace.Annotation.Rethrow) =>
-        prune(left.asInstanceOf[TestTrace[Boolean]], negated)
 
       case TestTrace.AndThen(left, right) =>
         prune(right, negated).map { next =>
@@ -261,14 +181,6 @@ object TestTrace {
         prune(not.trace, !negated)
     }
 
-  sealed trait Annotation
-
-  object Annotation {
-    case object Rethrow extends Annotation {
-      def unapply(value: Set[Annotation]): Boolean = value.contains(Rethrow)
-    }
-  }
-
   private[test] case class Node[+A](
     result: Result[A],
     message: ErrorMessage = ErrorMessage.choice("Result was true", "Result was false"),
@@ -277,10 +189,9 @@ object TestTrace {
     parentSpan: Option[Span] = None,
     fullCode: Option[String] = None,
     location: Option[String] = None,
-    annotations: Set[Annotation] = Set.empty,
     completeCode: Option[String] = None,
     customLabel: Option[String] = None,
-    genFailureDetails: Option[GenFailureDetails] = None
+    override val genFailureDetails: Option[GenFailureDetails] = None
   ) extends TestTrace[A] {
 
     def renderResult: Any =
@@ -317,7 +228,6 @@ object TestTrace {
   }
 
   def fail: TestTrace[Nothing]                        = Node(Result.Fail)
-  def fail(message: String): TestTrace[Nothing]       = Node(Result.Fail, message = ErrorMessage.text(message))
   def fail(message: ErrorMessage): TestTrace[Nothing] = Node(Result.Fail, message = message)
   def succeed[A](value: A): TestTrace[A]              = Node(Result.succeed(value))
   def option[A](value: Option[A])(message: ErrorMessage): TestTrace[A] = {

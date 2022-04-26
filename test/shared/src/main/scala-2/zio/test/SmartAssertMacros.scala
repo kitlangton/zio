@@ -74,6 +74,9 @@ class SmartAssertMacros(val c: blackbox.Context) {
       case AST.Method(lhs, _, _, "left", _, _, span) =>
         q"${parseAsAssertion(lhs)(start)} >>> $SA.asLeft.span($span)"
 
+      case AST.Method(lhs, _, _, "throwing", _, _, span) =>
+        q"${parseAsAssertion(lhs)(start)} >>> $SA.throws.span($span)"
+
       case AST.Method(lhs, _, _, "anything", _, _, span) =>
         q"${parseAsAssertion(lhs)(start)} >>> $SA.anything.span($span)"
 

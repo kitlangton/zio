@@ -6,12 +6,12 @@ import zio.test.render._
 
 import scala.io.AnsiColor
 
-object ErrorMessage {
+private[test] object ErrorMessage {
 
+  implicit def text(string: String): ErrorMessage            = choice(string, string)
   def choice(success: String, failure: String): ErrorMessage = Choice(success, failure)
   def custom(string: String): ErrorMessage                   = Custom(string)
   def pretty(value: Any): ErrorMessage                       = Value(PrettyPrint(value))
-  def text(string: String): ErrorMessage                     = choice(string, string)
   def throwable(throwable: Throwable): ErrorMessage          = ThrowableZIO(throwable)
   def value(value: Any): ErrorMessage                        = Value(value)
 
@@ -28,8 +28,7 @@ object ErrorMessage {
   private final case class Value(value: Any)                                               extends ErrorMessage
 }
 
-sealed trait ErrorMessage { self =>
-  def +(that: String): ErrorMessage        = ErrorMessage.Combine(self, ErrorMessage.text(that))
+private[test] sealed trait ErrorMessage { self =>
   def +(that: ErrorMessage): ErrorMessage  = ErrorMessage.Combine(self, that)
   def ++(that: ErrorMessage): ErrorMessage = ErrorMessage.CombineMessage(self, that)
 

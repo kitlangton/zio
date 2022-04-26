@@ -64,7 +64,7 @@ object CheckSpec extends ZIOBaseSpec {
       check(Gen.int)(a => assert(a)(isGreaterThan(0))).map {
         _.failures match {
           case Some(result) =>
-            result.getGenFailureDetails.fold(false)(_.shrunkenInput == 0)
+            result.genFailureDetails.fold(false)(_.shrunkenInput == 0)
           case _ => false
         }
       }.map(assert(_)(isTrue))

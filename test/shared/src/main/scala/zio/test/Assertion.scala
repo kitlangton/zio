@@ -1,16 +1,14 @@
 package zio.test
 
 import zio.internal.ansi.AnsiStringOps
-import zio.stacktracer.TracingImplicits.disableAutoTrace
-import zio.{Cause, Exit, ZIO, Trace}
-import zio.test.{ErrorMessage => M, _}
 import zio.test.internal.SmartAssertions
+import zio.test.{ErrorMessage => M}
+import zio.{Cause, Exit, Trace, ZIO}
+import zio.stacktracer.TracingImplicits.disableAutoTrace
 
 import scala.reflect.ClassTag
 import scala.util.Try
 
-// zio.test.DefaultTestReporterSpec
-// zio.test.TestAspectSpec
 final case class Assertion[-A](arrow: TestArrow[A, Boolean]) { self =>
 
   def &&[A1 <: A](that: Assertion[A1]): Assertion[A1] =
@@ -28,7 +26,6 @@ final case class Assertion[-A](arrow: TestArrow[A, Boolean]) { self =>
   def test(value: A)(implicit trace: Trace): Boolean =
     TestArrow.run(arrow.withLocation, Right(value)).isSuccess
 
-  // TODO: IMPLEMENT LABELING
   def label(message: String): Assertion[A] =
     Assertion(self.arrow.label(message))
 
@@ -81,6 +78,26 @@ object Assertion extends AssertionVariants {
           }
         }
         .withCode(name)
+    )
+
+  /**
+   * Makes a new `Assertion[A]` from a pretty-printing, a function `(=> A) =>
+   * Option[B]`, and an `Assertion[B]`. If the result of applying the function
+   * to a given value is `Some[B]`, the `Assertion[B]` will be applied to the
+   * resulting value to determine if the assertion is satisfied.
+   */
+  def assertionRec[A, B](name: String)(assertion: Assertion[B])(get: (=> A) => Option[B]): Assertion[A] =
+    Assertion(
+      TestArrow
+        .make[A, B] { a =>
+          val error = M.text("Custom Assertion") + M.value(name) + M.choice("succeeded", "failed")
+
+          get(a) match {
+            case Some(b) => TestTrace.succeed(b)
+            case None    => TestTrace.fail(error)
+          }
+        }
+        .withCode(name) >>> assertion.arrow
     )
 
   // TODO: Extend Syntax

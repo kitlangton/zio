@@ -24,10 +24,7 @@ import zio.test.render.ExecutionResult.Status.{Failed, Ignored, Passed}
 import zio.test.render.ExecutionResult.{ResultType, Status}
 import zio.test.render.LogLine.{Fragment, Line, Message}
 import zio.test.render._
-import zio.{Cause, _}
-
-import java.util.regex.Pattern
-import scala.annotation.tailrec
+import zio._
 
 // TODO Needs to be re-written or simply dropped for new streaming behavior. #6484
 object DefaultTestReporter {
@@ -214,7 +211,7 @@ object DefaultTestReporter {
     val failures = FailureCase.fromTrace(assertionResult, Chunk.empty)
     failures
       .map(fc =>
-        renderGenFailureDetails(assertionResult.getGenFailureDetails, offset) ++
+        renderGenFailureDetails(assertionResult.genFailureDetails, offset) ++
           Message(renderFailureCase(fc, offset, None))
       )
       .foldLeft(Message.empty)(_ ++ _)

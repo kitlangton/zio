@@ -2,24 +2,13 @@ package zio.test
 
 import zio.Chunk
 import zio.internal.ansi.AnsiStringOps
-import zio.stacktracer.TracingImplicits.disableAutoTrace
-import zio.test.TestArrow.Span
 import zio.test.ConsoleUtils._
+import zio.test.TestArrow.Span
 import zio.test.render.LogLine.Message
+import zio.stacktracer.TracingImplicits.disableAutoTrace
 
-import scala.annotation.tailrec
-
-sealed trait Result[+A] { self =>
-  def isFailOrDie: Boolean = self match {
-    case Result.Fail       => true
-    case Result.Die(_)     => true
-    case Result.Succeed(_) => false
-  }
-
-  def isDie: Boolean = self match {
-    case Result.Die(_) => true
-    case _             => false
-  }
+private[test] sealed trait Result[+A] { self =>
+  def isDie: Boolean = self.isInstanceOf[Result.Die]
 
   def zipWith[B, C](that: Result[B])(f: (A, B) => C): Result[C] =
     (self, that) match {
@@ -31,7 +20,7 @@ sealed trait Result[+A] { self =>
     }
 }
 
-object Result {
+private[test] object Result {
   def succeed[A](value: A): Result[A] = Succeed(value)
 
   def fail: Result[Nothing] = Fail
@@ -43,7 +32,11 @@ object Result {
   case class Succeed[+A](value: A) extends Result[A]
 }
 
-case class FailureCase(
+/**
+ * Used for rendering test results. These are constructed from
+ * `TestTrace[Boolean]` values.
+ */
+private[test] case class FailureCase private (
   errorMessage: Message,
   codeString: String,
   location: String,
@@ -54,45 +47,7 @@ case class FailureCase(
   customLabel: Option[String]
 )
 
-object FailureCase {
-  def highlight(
-    string: String,
-    span: Span,
-    parentSpan: Option[Span] = None,
-    color: String => String,
-    normalColor: String => String = identity
-  ): String =
-    parentSpan match {
-      case Some(Span(pStart, pEnd)) if pStart <= span.start && pEnd >= span.end =>
-        val part1 = string.take(pStart)
-        val part2 = string.slice(pStart, span.start)
-        val part3 = string.slice(span.start, span.end)
-        val part4 = string.slice(span.end, pEnd)
-        val part5 = string.drop(pEnd)
-        part1 + bold(part2) + bold(color(part3)) + bold(part4) + part5
-      case _ =>
-        bold(normalColor(string.take(span.start))) + bold(color(string.slice(span.start, span.end))) + bold(
-          normalColor(string.drop(span.end))
-        )
-    }
-
-  @tailrec
-  def rightmostNode(trace: TestTrace[Boolean]): TestTrace.Node[Boolean] = trace match {
-    case node: TestTrace.Node[Boolean] => node
-    case TestTrace.AndThen(_, right)   => rightmostNode(right)
-    case TestTrace.And(_, right)       => rightmostNode(right)
-    case TestTrace.Or(_, right)        => rightmostNode(right)
-    case TestTrace.Not(trace)          => rightmostNode(trace)
-  }
-
-  def getPath(trace: TestTrace[_]): Chunk[(String, String)] =
-    trace match {
-      case node: TestTrace.Node[_] =>
-        Chunk(node.code -> PrettyPrint(node.renderResult))
-      case TestTrace.AndThen(left, right) =>
-        getPath(left) ++ getPath(right)
-      case _ => Chunk.empty
-    }
+private[test] object FailureCase {
 
   def fromTrace(trace: TestTrace[Boolean], path: Chunk[(String, String)]): Chunk[FailureCase] =
     trace match {
@@ -137,4 +92,35 @@ object FailureCase {
       customLabel = node.customLabel
     )
   }
+
+  private def highlight(
+    string: String,
+    span: Span,
+    parentSpan: Option[Span] = None,
+    color: String => String,
+    normalColor: String => String = identity
+  ): String =
+    parentSpan match {
+      case Some(Span(pStart, pEnd)) if pStart <= span.start && pEnd >= span.end =>
+        val part1 = string.take(pStart)
+        val part2 = string.slice(pStart, span.start)
+        val part3 = string.slice(span.start, span.end)
+        val part4 = string.slice(span.end, pEnd)
+        val part5 = string.drop(pEnd)
+        part1 + bold(part2) + bold(color(part3)) + bold(part4) + part5
+      case _ =>
+        bold(normalColor(string.take(span.start))) + bold(color(string.slice(span.start, span.end))) + bold(
+          normalColor(string.drop(span.end))
+        )
+    }
+
+  private def getPath(trace: TestTrace[_]): Chunk[(String, String)] =
+    trace match {
+      case node: TestTrace.Node[_] =>
+        Chunk(node.code -> PrettyPrint(node.renderResult))
+      case TestTrace.AndThen(left, right) =>
+        getPath(left) ++ getPath(right)
+      case _ => Chunk.empty
+    }
+
 }

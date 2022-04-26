@@ -7,56 +7,16 @@ import zio.Trace
 
 import scala.util.control.NonFatal
 
-case class TestResult(arrow: TestArrow[Any, Boolean]) { self =>
+private[test] sealed trait TestArrow[-A, +B] { self =>
 
-  lazy val result: TestTrace[Boolean] = TestArrow.run(arrow, Right(()))
+  import TestArrow._
 
-  lazy val failures: Option[TestTrace[Boolean]] = TestTrace.prune(result, false)
-
-  def isFailure: Boolean = failures.isDefined
-
-  def isSuccess: Boolean = failures.isEmpty
-
-  def &&(that: TestResult): TestResult = TestResult(arrow && that.arrow)
-
-  def ||(that: TestResult): TestResult = TestResult(arrow || that.arrow)
-
-  def unary_! : TestResult = TestResult(!arrow)
-
-  def implies(that: TestResult): TestResult = !self || that
-
-  def ==>(that: TestResult): TestResult = self.implies(that)
-
-  def iff(that: TestResult): TestResult =
-    (self ==> that) && (that ==> self)
-
-  def <==>(that: TestResult): TestResult =
-    self.iff(that)
-
-  def ??(message: String): TestResult = self.label(message)
-
-  def label(message: String): TestResult = TestResult(arrow.label(message))
-
-  def setGenFailureDetails(details: GenFailureDetails): TestResult =
-    TestResult(arrow.setGenFailureDetails(details))
-}
-
-object TestResult {
-  def all(asserts: TestResult*): TestResult = asserts.reduce(_ && _)
-
-  def any(asserts: TestResult*): TestResult = asserts.reduce(_ || _)
-
-}
-
-sealed trait TestArrow[-A, +B] { self =>
   def ??(message: String): TestArrow[A, B] = self.label(message)
 
   def label(message: String): TestArrow[A, B] = self.meta(customLabel = Some(message))
 
-  def setGenFailureDetails(details: GenFailureDetails): TestArrow[A, B] =
+  def withGenFailureDetail(details: GenFailureDetails): TestArrow[A, B] =
     self.meta(genFailureDetails = Some(details))
-
-  import TestArrow._
 
   def meta(
     span: Option[Span] = None,
@@ -122,7 +82,7 @@ sealed trait TestArrow[-A, +B] { self =>
     Not(self.asInstanceOf[TestArrow[A1, Boolean]])
 }
 
-object TestArrow {
+private[test] object TestArrow {
 
   def succeed[A](value: => A): TestArrow[Any, A] = TestArrowF(_ => TestTrace.succeed(value))
 
@@ -131,7 +91,7 @@ object TestArrow {
   def suspend[A, B](f: A => TestArrow[Any, B]): TestArrow[A, B] = TestArrow.Suspend(f)
 
   def make[A, B](f: A => TestTrace[B]): TestArrow[A, B] =
-    makeEither(e => TestTrace.die(e).annotate(TestTrace.Annotation.Rethrow), f)
+    makeEither(TestTrace.die(_), f)
 
   def makeEither[A, B](onFail: Throwable => TestTrace[B], onSucceed: A => TestTrace[B]): TestArrow[A, B] =
     TestArrowF {
@@ -157,6 +117,7 @@ object TestArrow {
     }
 
   def run[A, B](arrow: TestArrow[A, B], in: Either[Throwable, A]): TestTrace[B] = attempt {
+
     arrow match {
       case TestArrowF(f) =>
         f(in)
@@ -164,8 +125,14 @@ object TestArrow {
       case AndThen(f, g) =>
         val t1 = run(f, in)
         t1.result match {
-          case Result.Fail           => t1.asInstanceOf[TestTrace[B]]
-          case Result.Die(err)       => t1 >>> run(g, Left(err))
+          case Result.Fail => t1.asInstanceOf[TestTrace[B]]
+          case Result.Die(err) =>
+            val t2 = run(g, Left(err))
+            // If the second trace dies with the same error, that means it
+            // was not recovered from and we return the first trace.
+            if (t2.result == t2.result) t1.asInstanceOf[TestTrace[B]]
+            else t1 >>> t2
+
           case Result.Succeed(value) => t1 >>> run(g, Right(value))
         }
 

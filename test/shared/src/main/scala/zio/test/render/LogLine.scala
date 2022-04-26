@@ -48,11 +48,13 @@ object LogLine {
       }
     )
   }
+
   object Message {
     def apply(lines: Seq[Line]): Message = Message(lines.toVector)
     def apply(lineText: String): Message = Fragment(lineText).toLine.toMessage
     val empty: Message                   = Message()
   }
+
   case class Line(fragments: Vector[Fragment] = Vector.empty, offset: Int = 0) { self =>
     def +:(fragment: Fragment): Line       = Line(fragment +: fragments)
     def :+(fragment: Fragment): Line       = Line(fragments :+ fragment)
@@ -76,10 +78,12 @@ object LogLine {
         }
         .toVector
   }
+
   object Line {
     def fromString(text: String, offset: Int = 0): Line = Fragment(text).toLine.withOffset(offset)
     val empty: Line                                     = Line()
   }
+
   case class Fragment(text: String, style: Style = Style.Default) { self =>
     def +:(line: Line)            = prepend(line)
     def prepend(line: Line): Line = Line(this +: line.fragments, line.offset)
@@ -96,6 +100,7 @@ object LogLine {
     def ansi(ansiColor: String): Fragment =
       copy(style = Style.Ansi(self, ansiColor))
   }
+
   object Fragment {
     sealed trait Style
     object Style {

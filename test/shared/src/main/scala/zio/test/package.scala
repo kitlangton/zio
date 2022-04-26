@@ -881,6 +881,8 @@ package object test extends CompileVariants {
      */
     def subtype[Subtype <: A]: TestLens[Subtype] = throw SmartAssertionExtensionError()
 
+    def throwing: TestLens[Throwable] = throw SmartAssertionExtensionError()
+
     /**
      * Transforms a value with the given [[CustomAssertion]]
      */
