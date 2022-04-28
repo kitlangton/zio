@@ -10,6 +10,7 @@ import zio.test.render.LogLine.Message
 import scala.annotation.tailrec
 
 sealed trait Result[+A] { self =>
+
   def isFailOrDie: Boolean = self match {
     case Result.Fail       => true
     case Result.Die(_)     => true
@@ -29,6 +30,11 @@ sealed trait Result[+A] { self =>
       case (Result.Die(err), _)                   => Result.die(err)
       case (_, Result.Die(err))                   => Result.die(err)
     }
+
+  def toOption: Option[A] = self match {
+    case Result.Succeed(a) => Some(a)
+    case _                 => None
+  }
 }
 
 object Result {

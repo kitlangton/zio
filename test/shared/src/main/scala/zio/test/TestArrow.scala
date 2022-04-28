@@ -7,53 +7,12 @@ import zio.Trace
 
 import scala.util.control.NonFatal
 
-case class TestResult(arrow: TestArrow[Any, Boolean]) { self =>
+sealed trait TestArrow[-In, +Out] { self =>
+  def ??(message: String): TestArrow[In, Out] = self.label(message)
 
-  lazy val result: TestTrace[Boolean] = TestArrow.run(arrow, Right(()))
+  def label(message: String): TestArrow[In, Out] = self.meta(customLabel = Some(message))
 
-  lazy val failures: Option[TestTrace[Boolean]] = TestTrace.prune(result, false)
-
-  def isFailure: Boolean = failures.isDefined
-
-  def isSuccess: Boolean = failures.isEmpty
-
-  def &&(that: TestResult): TestResult = TestResult(arrow && that.arrow)
-
-  def ||(that: TestResult): TestResult = TestResult(arrow || that.arrow)
-
-  def unary_! : TestResult = TestResult(!arrow)
-
-  def implies(that: TestResult): TestResult = !self || that
-
-  def ==>(that: TestResult): TestResult = self.implies(that)
-
-  def iff(that: TestResult): TestResult =
-    (self ==> that) && (that ==> self)
-
-  def <==>(that: TestResult): TestResult =
-    self.iff(that)
-
-  def ??(message: String): TestResult = self.label(message)
-
-  def label(message: String): TestResult = TestResult(arrow.label(message))
-
-  def setGenFailureDetails(details: GenFailureDetails): TestResult =
-    TestResult(arrow.setGenFailureDetails(details))
-}
-
-object TestResult {
-  def all(asserts: TestResult*): TestResult = asserts.reduce(_ && _)
-
-  def any(asserts: TestResult*): TestResult = asserts.reduce(_ || _)
-
-}
-
-sealed trait TestArrow[-A, +B] { self =>
-  def ??(message: String): TestArrow[A, B] = self.label(message)
-
-  def label(message: String): TestArrow[A, B] = self.meta(customLabel = Some(message))
-
-  def setGenFailureDetails(details: GenFailureDetails): TestArrow[A, B] =
+  def setGenFailureDetails(details: GenFailureDetails): TestArrow[In, Out] =
     self.meta(genFailureDetails = Some(details))
 
   import TestArrow._
@@ -66,8 +25,8 @@ sealed trait TestArrow[-A, +B] { self =>
     completeCode: Option[String] = None,
     customLabel: Option[String] = None,
     genFailureDetails: Option[GenFailureDetails] = None
-  ): TestArrow[A, B] = self match {
-    case meta: Meta[A, B] =>
+  ): TestArrow[In, Out] = self match {
+    case meta: Meta[In, Out] =>
       meta.copy(
         span = meta.span.orElse(span),
         parentSpan = meta.parentSpan.orElse(parentSpan),
@@ -90,35 +49,35 @@ sealed trait TestArrow[-A, +B] { self =>
       )
   }
 
-  def span(span: (Int, Int)): TestArrow[A, B] =
+  def span(span: (Int, Int)): TestArrow[In, Out] =
     meta(span = Some(Span(span._1, span._2)))
 
-  def withCode(code: String): TestArrow[A, B] =
+  def withCode(code: String): TestArrow[In, Out] =
     meta(code = Some(code))
 
-  def withCompleteCode(completeCode: String): TestArrow[A, B] =
+  def withCompleteCode(completeCode: String): TestArrow[In, Out] =
     meta(completeCode = Some(completeCode))
 
-  def withLocation(implicit trace: Trace): TestArrow[A, B] =
+  def withLocation(implicit trace: Trace): TestArrow[In, Out] =
     trace match {
       case Trace(_, file, line) =>
         meta(location = Some(s"$file:$line"))
       case _ => self
     }
 
-  def withParentSpan(span: (Int, Int)): TestArrow[A, B] =
+  def withParentSpan(span: (Int, Int)): TestArrow[In, Out] =
     meta(parentSpan = Some(Span(span._1, span._2)))
 
-  def >>>[C](that: TestArrow[B, C]): TestArrow[A, C] =
-    AndThen[A, B, C](self, that)
+  def >>>[C](that: TestArrow[Out, C]): TestArrow[In, C] =
+    AndThen[In, Out, C](self, that)
 
-  def &&[A1 <: A](that: TestArrow[A1, Boolean])(implicit ev: B <:< Boolean): TestArrow[A1, Boolean] =
+  def &&[A1 <: In](that: TestArrow[A1, Boolean])(implicit ev: Out <:< Boolean): TestArrow[A1, Boolean] =
     And(self.asInstanceOf[TestArrow[A1, Boolean]], that)
 
-  def ||[A1 <: A](that: TestArrow[A1, Boolean])(implicit ev: B <:< Boolean): TestArrow[A1, Boolean] =
+  def ||[A1 <: In](that: TestArrow[A1, Boolean])(implicit ev: Out <:< Boolean): TestArrow[A1, Boolean] =
     Or(self.asInstanceOf[TestArrow[A1, Boolean]], that)
 
-  def unary_![A1 <: A](implicit ev: B <:< Boolean): TestArrow[A1, Boolean] =
+  def unary_![A1 <: In](implicit ev: Out <:< Boolean): TestArrow[A1, Boolean] =
     Not(self.asInstanceOf[TestArrow[A1, Boolean]])
 }
 
@@ -126,34 +85,17 @@ object TestArrow {
 
   def succeed[A](value: => A): TestArrow[Any, A] = TestArrowF(_ => TestTrace.succeed(value))
 
-  def fromFunction[A, B](f: A => B): TestArrow[A, B] = make(f andThen TestTrace.succeed)
+  def fromFunction[In, B](f: In => B): TestArrow[In, B] = make(f andThen TestTrace.succeed)
 
-  def suspend[A, B](f: A => TestArrow[Any, B]): TestArrow[A, B] = TestArrow.Suspend(f)
+  def suspend[In, B](f: In => TestArrow[Any, B]): TestArrow[In, B] = TestArrow.Suspend(f)
 
-  def make[A, B](f: A => TestTrace[B]): TestArrow[A, B] =
+  def make[In, B](f: In => TestTrace[B]): TestArrow[In, B] =
     makeEither(e => TestTrace.die(e).annotate(TestTrace.Annotation.Rethrow), f)
 
-  def makeEither[A, B](onFail: Throwable => TestTrace[B], onSucceed: A => TestTrace[B]): TestArrow[A, B] =
+  def makeEither[In, B](onFail: Throwable => TestTrace[B], onSucceed: In => TestTrace[B]): TestArrow[In, B] =
     TestArrowF {
       case Left(error)  => onFail(error)
       case Right(value) => onSucceed(value)
-    }
-
-  private def attempt[A](expr: => TestTrace[A]): TestTrace[A] =
-    try {
-      expr
-    } catch {
-      case NonFatal(exception) =>
-        val trace = exception.getStackTrace
-        var met   = false
-        val newTrace = trace.filterNot { trace =>
-          if (trace.toString.contains("zio.test.TestArrow")) {
-            met = true
-          }
-          met
-        }
-        exception.setStackTrace(newTrace)
-        TestTrace.die(exception)
     }
 
   def run[A, B](arrow: TestArrow[A, B], in: Either[Throwable, A]): TestTrace[B] = attempt {
@@ -199,12 +141,29 @@ object TestArrow {
 
   }
 
-  case class Span(start: Int, end: Int) {
+  private def attempt[A](expr: => TestTrace[A]): TestTrace[A] =
+    try {
+      expr
+    } catch {
+      case NonFatal(exception) =>
+        val trace = exception.getStackTrace
+        var met   = false
+        val newTrace = trace.filterNot { trace =>
+          if (trace.toString.contains("zio.test.TestArrow")) {
+            met = true
+          }
+          met
+        }
+        exception.setStackTrace(newTrace)
+        TestTrace.die(exception)
+    }
+
+  private[test] final case class Span(start: Int, end: Int) {
     def substring(str: String): String = str.substring(start, end)
   }
 
-  case class Meta[-A, +B](
-    arrow: TestArrow[A, B],
+  private final case class Meta[-In, +Out](
+    arrow: TestArrow[In, Out],
     span: Option[Span],
     parentSpan: Option[Span],
     code: Option[String],
@@ -212,11 +171,14 @@ object TestArrow {
     completeCode: Option[String],
     customLabel: Option[String],
     genFailureDetails: Option[GenFailureDetails]
-  ) extends TestArrow[A, B]
-  case class TestArrowF[-A, +B](f: Either[Throwable, A] => TestTrace[B])       extends TestArrow[A, B]
-  case class AndThen[A, B, C](f: TestArrow[A, B], g: TestArrow[B, C])          extends TestArrow[A, C]
-  case class And[A](left: TestArrow[A, Boolean], right: TestArrow[A, Boolean]) extends TestArrow[A, Boolean]
-  case class Or[A](left: TestArrow[A, Boolean], right: TestArrow[A, Boolean])  extends TestArrow[A, Boolean]
-  case class Not[A](arrow: TestArrow[A, Boolean])                              extends TestArrow[A, Boolean]
-  case class Suspend[A, B](f: A => TestArrow[Any, B])                          extends TestArrow[A, B]
+  ) extends TestArrow[In, Out]
+
+  private final case class TestArrowF[-In, +Out](f: Either[Throwable, In] => TestTrace[Out]) extends TestArrow[In, Out]
+  private final case class AndThen[In, X, Out](f: TestArrow[In, X], g: TestArrow[X, Out])    extends TestArrow[In, Out]
+  private final case class And[In](left: TestArrow[In, Boolean], right: TestArrow[In, Boolean])
+      extends TestArrow[In, Boolean]
+  private final case class Or[In](left: TestArrow[In, Boolean], right: TestArrow[In, Boolean])
+      extends TestArrow[In, Boolean]
+  private final case class Not[In](arrow: TestArrow[In, Boolean])         extends TestArrow[In, Boolean]
+  private final case class Suspend[In, Out](f: In => TestArrow[Any, Out]) extends TestArrow[In, Out]
 }
