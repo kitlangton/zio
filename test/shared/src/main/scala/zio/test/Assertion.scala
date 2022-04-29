@@ -9,8 +9,6 @@ import zio.test.internal.SmartAssertions
 import scala.reflect.ClassTag
 import scala.util.Try
 
-// zio.test.DefaultTestReporterSpec
-// zio.test.TestAspectSpec
 final case class Assertion[-A](arrow: TestArrow[A, Boolean]) { self =>
 
   def &&[A1 <: A](that: Assertion[A1]): Assertion[A1] =
@@ -28,7 +26,6 @@ final case class Assertion[-A](arrow: TestArrow[A, Boolean]) { self =>
   def test(value: A)(implicit trace: Trace): Boolean =
     TestArrow.run(arrow.withLocation, Right(value)).isSuccess
 
-  // TODO: IMPLEMENT LABELING
   def label(message: String): Assertion[A] =
     Assertion(self.arrow.label(message))
 

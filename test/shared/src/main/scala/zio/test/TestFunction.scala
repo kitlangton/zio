@@ -27,6 +27,9 @@ object TestFunction {
   final case class TestFunctionMakePartiallyApplied[In]() {
     def apply[Out](f: In => Out): TestFunction[In, Out] =
       macro SmartAssertMacros.makeArrow_impl[In, Out]
+
+    def apply[Out](message: String)(f: In => Out): TestFunction[In, Out] =
+      macro SmartAssertMacros.makeArrowMessage_impl[In, Out]
   }
 
   def makeEither[A]: TestFunctionMakeEitherPartiallyApplied[A] =

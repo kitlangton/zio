@@ -13,6 +13,11 @@ class SmartAssertMacros(val c: blackbox.Context) {
   private val Arrow      = q"_root_.zio.test.TestArrow"
   private val TestResult = q"_root_.zio.test.TestResult"
 
+  def makeArrowMessage_impl[A: c.WeakTypeTag, B: c.WeakTypeTag](message: c.Expr[String])(
+    f: c.Expr[A => B]
+  ): c.Expr[TestFunction[A, B]] =
+    c.Expr[TestFunction[A, B]](q"${makeArrow_impl[A, B](f)}.??($message)")
+
   def makeArrow_impl[A: c.WeakTypeTag, B: c.WeakTypeTag](f: c.Expr[A => B]): c.Expr[TestFunction[A, B]] = {
     val (_, start, codeString) = text(f.tree)
     implicit val pos           = PositionContext(start, codeString)
