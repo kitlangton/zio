@@ -27,12 +27,10 @@ object SmartAssertions {
       }
     }
 
-  def custom[A, B](customAssertion: CustomAssertion[A, B]): TestArrow[A, B] =
+  def custom[A, B](customAssertion: TestFunction[A, B]): TestArrow[A, B] =
     TestArrow.make { a =>
-      customAssertion.run(a) match {
-        case Left(error)  => TestTrace.fail(error)
-        case Right(value) => TestTrace.succeed(value)
-      }
+      val trace = customAssertion.runTrace(a)
+      trace.rightmost
     }
 
   def isSome[A]: TestArrow[Option[A], A] =

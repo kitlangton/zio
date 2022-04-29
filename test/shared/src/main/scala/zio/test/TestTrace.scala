@@ -42,10 +42,15 @@ sealed trait TestTrace[+A] { self =>
    * Apply the metadata to the rightmost node in the trace.
    */
   final def withSpan(span: Option[Span] = None): TestTrace[A] = if (span.isDefined) {
-    self match {
-      case node: TestTrace.Node[_]        => node.copy(span = span)
-      case TestTrace.AndThen(left, right) => TestTrace.AndThen(left, right.withSpan(span))
-      case zip                            => zip
+    self.asInstanceOf[TestTrace[_]] match {
+      case node: TestTrace.Node[_] => node.copy(span = span).asInstanceOf[TestTrace[A]]
+      case TestTrace.AndThen(left, right) =>
+        TestTrace.AndThen(left.withSpan(span), right.withSpan(span)).asInstanceOf[TestTrace[A]]
+      case TestTrace.And(left, right) =>
+        TestTrace.And(left.withSpan(span), right.withSpan(span)).asInstanceOf[TestTrace[A]]
+      case TestTrace.Or(left, right) =>
+        TestTrace.Or(left.withSpan(span), right.withSpan(span)).asInstanceOf[TestTrace[A]]
+      case zip => zip.asInstanceOf[TestTrace[A]]
     }
   } else {
     self
@@ -211,6 +216,12 @@ sealed trait TestTrace[+A] { self =>
     TestTrace.AndThen(self, that)
 
   def result: Result[A]
+
+  def rightmost: TestTrace[A] =
+    self match {
+      case TestTrace.AndThen(_, right) => right.rightmost
+      case _                           => self
+    }
 }
 
 object TestTrace {

@@ -13,6 +13,24 @@ class SmartAssertMacros(val c: blackbox.Context) {
   private val Arrow      = q"_root_.zio.test.TestArrow"
   private val TestResult = q"_root_.zio.test.TestResult"
 
+  def makeArrow_impl[A: c.WeakTypeTag, B: c.WeakTypeTag](f: c.Expr[A => B]): c.Expr[TestFunction[A, B]] = {
+    val (_, start, codeString) = text(f.tree)
+    implicit val pos           = PositionContext(start, codeString)
+
+    val parsed = parseExpr(f.tree)
+    val ast    = astToAssertion(parsed)
+
+    val aTpe = c.weakTypeOf[A]
+    val bTpe = c.weakTypeOf[B]
+    val block =
+      q"""
+_root_.zio.test.TestFunction.TestFunctionArrow[$aTpe, $bTpe]($ast.withCode($codeString).withLocation)
+        """
+
+    c.Expr[TestFunction[A, B]](block)
+
+  }
+
   def assert_impl(expr: c.Expr[Boolean], exprs: c.Expr[Boolean]*): c.Tree =
     exprs.map(assertOne_impl).foldLeft(assertOne_impl(expr)) { (acc, assert) =>
       q"$acc && $assert"
@@ -63,46 +81,46 @@ class SmartAssertMacros(val c: blackbox.Context) {
     }
   }
 
-  def parseAsAssertion(ast: AST)(start: c.Tree)(implicit positionContext: PositionContext): c.Tree =
+  def parseIsAssertion(ast: AST)(start: c.Tree)(implicit positionContext: PositionContext): c.Tree =
     ast match {
       case AST.Method(lhs, _, _, "some", _, _, span) =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.isSome.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.isSome.span($span)"
 
       case AST.Method(lhs, _, _, "right", _, _, span) =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asRight.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asRight.span($span)"
 
       case AST.Method(lhs, _, _, "left", _, _, span) =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asLeft.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asLeft.span($span)"
 
       case AST.Method(lhs, _, _, "anything", _, _, span) =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.anything.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.anything.span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "subtype", List(tpe), _, span) =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.as[${lhsTpe.typeArgs.head}, $tpe].span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.as[${lhsTpe.typeArgs.head}, $tpe].span($span)"
 
-      case AST.Method(lhs, _, _, "custom", List(_), Some(List(customAssertion)), span) =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.custom($customAssertion).span($span)"
+      case AST.Method(lhs, _, _, "run", List(_), Some(List(testFunction)), span) =>
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.custom($testFunction).span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "die", _, _, span) if lhsTpe <:< weakTypeOf[TestLens[Exit[_, _]]] =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asExitDie.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asExitDie.span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "failure", _, _, span) if lhsTpe <:< weakTypeOf[TestLens[Exit[_, _]]] =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asExitFailure.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asExitFailure.span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "success", _, _, span) if lhsTpe <:< weakTypeOf[TestLens[Exit[_, _]]] =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asExitSuccess.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asExitSuccess.span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "interrupted", _, _, span) if lhsTpe <:< weakTypeOf[TestLens[Exit[_, _]]] =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asExitInterrupted.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asExitInterrupted.span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "die", _, _, span) if lhsTpe <:< weakTypeOf[TestLens[Cause[_]]] =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asCauseDie.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asCauseDie.span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "failure", _, _, span) if lhsTpe <:< weakTypeOf[TestLens[Cause[_]]] =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asCauseFailure.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asCauseFailure.span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "interrupted", _, _, span) if lhsTpe <:< weakTypeOf[TestLens[Cause[_]]] =>
-        q"${parseAsAssertion(lhs)(start)} >>> $SA.asCauseInterrupted.span($span)"
+        q"${parseIsAssertion(lhs)(start)} >>> $SA.asCauseInterrupted.span($span)"
 
       case _ =>
         start
@@ -119,13 +137,17 @@ class SmartAssertMacros(val c: blackbox.Context) {
       case AST.Or(lhs, rhs, _, ls, rs) =>
         q"${astToAssertion(lhs)}.withParentSpan($ls) || ${astToAssertion(rhs)}.withParentSpan($rs)"
 
-      // Matches `zio.test.SmartAssertionOps.as`
+      // Matches `zio.test.SmartAssertionOps.is`
       case AST.Method(lhs, _, _, "is", _, Some(List(arg)), _) if arg.tpe.typeArgs.head <:< weakTypeOf[TestLens[_]] =>
         val assertion = astToAssertion(lhs)
         parseExpr(arg) match {
-          case AST.Function(_, rhs, _, _) => parseAsAssertion(rhs)(assertion)
+          case AST.Function(_, rhs, _, _) => parseIsAssertion(rhs)(assertion)
           case _                          => throw new Error("This is not possible.")
         }
+
+      case AST.Method(lhs, _, _, "is", _, Some(List(arg)), span) if arg.tpe <:< weakTypeOf[TestFunction[_, _]] =>
+        val assertion = astToAssertion(lhs)
+        q"$assertion >>> $SA.custom($arg).span($span)"
 
       case AST.Method(lhs, lhsTpe, _, "forall", _, Some(args), span) if lhsTpe <:< weakTypeOf[Iterable[_]] =>
         val assertion = astToAssertion(parseExpr(args.head))
@@ -272,7 +294,7 @@ $TestResult($ast.withCode($codeString).withLocation)
 
   // Pilfered (with immense gratitude & minor modifications)
   // from https://github.com/com-lihaoyi/sourcecode
-  private def text[T: c.WeakTypeTag](tree: c.Tree): (Int, Int, String) = {
+  private def text(tree: c.Tree): (Int, Int, String) = {
     val fileContent = new String(tree.pos.source.content)
     var start = tree.collect { case treeVal =>
       treeVal.pos match {

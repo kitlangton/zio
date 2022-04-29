@@ -436,17 +436,17 @@ object SmartAssertionSpec extends ZIOBaseSpec {
         assertTrue(opt.is(_.some.anything))
       } @@ failing
     ),
-    suite("is custom assertions")(
+    suite("is test functions")(
       test("success") {
         val opt: Option[Either[Int, Color]] = Option(Right(Blue("hello")))
 
-        val colorAssertion: CustomAssertion[Color, Red] =
-          CustomAssertion.make[Color] {
+        val colorAssertion: TestFunction[Color, Red] =
+          TestFunction.makeEither[Color] {
             case Red(foo) => Right(Red(foo))
             case _        => Left("Cannot be Blue")
           }
 
-        assertTrue(opt.is(_.some.right.custom(colorAssertion)).foo == 14)
+        assertTrue(opt.is(_.some.right.run(colorAssertion)).foo == 14)
       }
     ) @@ failing,
     suite("Map")(

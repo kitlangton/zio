@@ -883,10 +883,10 @@ package object test extends CompileVariants {
     def subtype[Subtype <: A]: TestLens[Subtype] = throw SmartAssertionExtensionError()
 
     /**
-     * Transforms a value with the given [[CustomAssertion]]
+     * Transforms a value with the given [[TestFunction]]
      */
-    def custom[B](customAssertion: CustomAssertion[A, B]): TestLens[B] = {
-      val _ = customAssertion
+    def run[B](testFunction: TestFunction[A, B]): TestLens[B] = {
+      val _ = testFunction
       throw SmartAssertionExtensionError()
     }
   }
@@ -905,6 +905,11 @@ package object test extends CompileVariants {
      */
     def is[B](f: TestLens[A] => TestLens[B]): B = {
       val _ = f
+      throw SmartAssertionExtensionError()
+    }
+
+    def is[B](testFunction: TestFunction[A, B]): B = {
+      val _ = testFunction
       throw SmartAssertionExtensionError()
     }
   }
