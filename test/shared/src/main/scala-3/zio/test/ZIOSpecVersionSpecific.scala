@@ -51,7 +51,7 @@ object ZIOSpecVersionSpecificMacros {
           loop(rest, valDef :: acc, ref :: refs)
         case Nil =>
           val mySuite =  {
-              val combinedTypes = refs.map(_.tpe).reduce(OrType(_, _)).widen
+              val combinedTypes = refs.reverse.map(_.tpe).reduce(OrType(_, _)).widen
               val names = 
                 combinedTypes.asType match {
                   case '[specType] =>
